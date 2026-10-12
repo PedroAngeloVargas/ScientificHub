@@ -1,0 +1,33 @@
+// perfil-service/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" 
+  url      = env("DATABASE_URL")
+}
+
+enum TipoUsuario {
+  ALUNO
+  PROFESSOR
+  PESQUISADOR_EXTERNO
+}
+
+model Usuario {
+  id             String      @id @default(uuid())
+  nome           String
+  email          String      @unique
+  matricula      String?     @unique // Opcional, pois externos não têm matrícula
+  tipo           TipoUsuario @default(ALUNO)
+  
+  // Informações institucionais
+  curso          String?     // Ex: Sistemas de Informação
+  departamento   String?
+  
+  criadoEm       DateTime    @default(now())
+  atualizadoEm   DateTime    @updatedAt
+
+  @@map("usuarios")
+}

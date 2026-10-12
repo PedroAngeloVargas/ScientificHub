@@ -1,0 +1,35 @@
+#Compose utilizado para testes locais, não é utilizado em produção.
+
+version: '3.8'
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: hub_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: SEU_NOME_DE_USUARIO_AQUI
+      POSTGRES_PASSWORD: SUA_SENHA_AQUI
+      POSTGRES_DB: hub_cientifico
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+  neo4j:
+    image: neo4j:5
+    container_name: hub_neo4j
+    restart: always
+    environment:
+      NEO4J_AUTH: neo4j/SUA_SENHA_AQUI
+    ports:
+      - "7474:7474"
+      - "7687:7687" 
+    volumes:
+      - neo4j_data:/data
+
+volumes:
+  postgres_data:
+  neo4j_data:

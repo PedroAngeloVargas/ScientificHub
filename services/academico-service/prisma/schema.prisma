@@ -1,0 +1,60 @@
+// academico-service/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" 
+  url      = env("DATABASE_URL")
+}
+
+enum CategoriaPublicacao {
+  ARTIGO
+  TCC
+  DISSERTACAO
+  TESE
+  RELATORIO_TECNICO
+}
+
+enum TipoProjeto {
+  PESQUISA
+  EXTENSAO
+}
+
+model Publicacao {
+  id              String              @id @default(uuid())
+  titulo          String              
+  resumo          String              
+  categoria       CategoriaPublicacao
+  arquivoUrl      String?             // Link para o PDF (ex: AWS S3 ou OCI Object Storage)
+  
+  // "Soft Reference" para o perfil-service (Não é uma Foreign Key no banco)
+  autorPrincipalId String             
+  
+  dataPublicacao  DateTime
+  criadoEm        DateTime            @default(now())
+
+  @@index([autorPrincipalId]) // Índice para buscas rápidas pelas publicações de um autor
+  @@map("publicacoes")
+}
+
+model Projeto {
+  id              String      @id @default(uuid())
+  titulo          String      
+  descricao       String      
+  tipo            TipoProjeto
+  status          String      @default("EM_ANDAMENTO") // EM_ANDAMENTO, CONCLUIDO
+  
+  // "Soft Reference" para o perfil-service
+  coordenadorId   String      
+  
+  dataInicio      DateTime
+  dataFim         DateTime?
+  
+  criadoEm        DateTime    @default(now())
+  atualizadoEm    DateTime    @updatedAt
+
+  @@index([coordenadorId])
+  @@map("projetos")
+}
