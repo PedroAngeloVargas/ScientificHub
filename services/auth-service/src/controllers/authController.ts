@@ -15,6 +15,7 @@ export const registrar = async (req: Request, res: Response) => {
 
     res.status(201).json({ mensagem: 'Credencial criada com sucesso!' });
   } catch (error) {
+    console.error("ERRO NO LOGIN:", error);
     res.status(500).json({ error: 'Erro ao registrar credencial.' });
   }
 };
@@ -44,6 +45,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     res.json({ token, perfilId: credencial.perfilId });
   } catch (error) {
+    console.error("ERRO NO LOGIN:", error);
     res.status(500).json({ error: 'Erro interno ao fazer login.' });
   }
 };
