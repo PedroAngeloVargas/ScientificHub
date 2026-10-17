@@ -13,21 +13,30 @@ enum TipoUsuario {
   ALUNO
   PROFESSOR
   PESQUISADOR_EXTERNO
+  ADMIN
+}
+
+model Disciplina {
+  id   String @id @default(uuid())
+  nome String @unique
+
+  @@map("disciplinas")
 }
 
 model Usuario {
-  id             String      @id @default(uuid())
-  nome           String
-  email          String      @unique
-  matricula      String?     @unique // Opcional, pois externos não têm matrícula
-  tipo           TipoUsuario @default(ALUNO)
-  
-  // Informações institucionais
-  curso          String?     // Ex: Sistemas de Informação
-  departamento   String?
-  
-  criadoEm       DateTime    @default(now())
-  atualizadoEm   DateTime    @updatedAt
+  id           String      @id @default(uuid())
+  nome         String
+  email        String      @unique
+  cpf          String      @unique // Novo campo obrigatório no cadastro
+  telefone     String?             // Preenchido no primeiro acesso
+  endereco     String?             // Preenchido no primeiro acesso
+  matricula    String      @unique
+  tipo         TipoUsuario
+  curso        String
+  departamento String
+
+  criadoEm     DateTime    @default(now())
+  atualizadoEm DateTime    @updatedAt
 
   @@map("usuarios")
 }

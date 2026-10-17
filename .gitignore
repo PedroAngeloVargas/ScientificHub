@@ -24,3 +24,8 @@ coverage/
 Thumbs.db
 .vscode/*
 .idea/
+CLAUDE.md
+*.pdf
+AGENTS.md
+/frontend/README.md
+/frontend/public

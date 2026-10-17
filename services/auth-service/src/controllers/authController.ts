@@ -43,9 +43,28 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       { expiresIn: '8h' } // Tempo de expiração
     );
 
-    res.json({ token, perfilId: credencial.perfilId });
+  res.json({ 
+      token, 
+      perfilId: credencial.perfilId,
+      primeiroAcesso: credencial.primeiroAcesso // <-- ADICIONAR ISTO
+    });
   } catch (error) {
     console.error("ERRO NO LOGIN:", error);
-    res.status(500).json({ error: 'Erro interno ao fazer login.' });
+    res.status(500).json({ error: 'Erro ao fazer login.' });
+  }
+};
+
+export const atualizarSenha = async (req: any, res: Response) => {
+  const { novaSenha } = req.body;
+  const perfilId = req.usuario.perfilId; // Vem do token JWT
+  try {
+    const senhaHash = await bcrypt.hash(novaSenha, 10);
+    await prisma.credencial.update({
+      where: { perfilId },
+      data: { senha: senhaHash, primeiroAcesso: false }
+    });
+    res.json({ mensagem: 'Senha atualizada e primeiro acesso concluído!' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao atualizar senha.' });
   }
 };

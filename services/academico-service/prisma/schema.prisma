@@ -27,15 +27,16 @@ model Publicacao {
   titulo          String              
   resumo          String              
   categoria       CategoriaPublicacao
-  arquivoUrl      String?             // Link para o PDF (ex: AWS S3 ou OCI Object Storage)
+  arquivoUrl      String?             // Aqui ficará o caminho do PDF guardado pelo Multer
   
-  // "Soft Reference" para o perfil-service (Não é uma Foreign Key no banco)
   autorPrincipalId String             
+  orientadorId     String?            // <-- NOVO: ID do Professor (Opcional, pois artigos podem não ter)
   
   dataPublicacao  DateTime
   criadoEm        DateTime            @default(now())
 
-  @@index([autorPrincipalId]) // Índice para buscas rápidas pelas publicações de um autor
+  @@index([autorPrincipalId])
+  @@index([orientadorId]) // <-- NOVO: Índice para buscas pelo orientador
   @@map("publicacoes")
 }
 

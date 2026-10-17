@@ -88,3 +88,16 @@ export const recomendarProjetos = async (req: Request, res: Response) => {
     await session.close();
   }
 };
+
+export const listarAreas = async (req: Request, res: Response) => {
+  const session = getSession();
+  try {
+    const result = await session.run(`MATCH (a:Area) RETURN a.nome AS nome ORDER BY a.nome`);
+    const areas = result.records.map(record => record.get('nome'));
+    res.json(areas);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar áreas no Neo4j.' });
+  } finally {
+    await session.close();
+  }
+};

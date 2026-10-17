@@ -10,11 +10,12 @@ datasource db {
 }
 
 model Credencial {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  senha     String   
-  perfilId  String   @unique 
-  criadoEm  DateTime @default(now())
+  id            String   @id @default(uuid())
+  email         String   @unique
+  senha         String   
+  perfilId      String   @unique 
+  primeiroAcesso Boolean  @default(true) // <-- NOVO: Força a troca de senha
+  criadoEm      DateTime @default(now())
 
   @@map("credenciais")
 }

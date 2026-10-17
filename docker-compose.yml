@@ -9,8 +9,8 @@ services:
     container_name: hub_postgres
     restart: always
     environment:
-      POSTGRES_USER: SEU_NOME_DE_USUARIO_AQUI
-      POSTGRES_PASSWORD: SUA_SENHA_AQUI
+      POSTGRES_USER: SEU_USUARIO
+      POSTGRES_PASSWORD: SUA_SENHA
       POSTGRES_DB: hub_cientifico
     ports:
       - "5432:5432"
@@ -23,13 +23,31 @@ services:
     container_name: hub_neo4j
     restart: always
     environment:
-      NEO4J_AUTH: neo4j/SUA_SENHA_AQUI
+      NEO4J_AUTH: neo4j/SUA_SENHA
     ports:
       - "7474:7474"
       - "7687:7687" 
     volumes:
       - neo4j_data:/data
 
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: dbeaver
+    ports:
+      - "127.0.0.1:8978:8978"
+    environment:
+      - CB_SERVER_NAME=CloudBeaver Community
+    volumes:
+      - cloudbeaver_data:/opt/cloudbeaver/workspace
+    networks:
+      - hub_network
+    restart: always
+
+networks:
+  hub_network:
+    driver: bridge
+
 volumes:
   postgres_data:
   neo4j_data:
+  cloudbeaver_data:
