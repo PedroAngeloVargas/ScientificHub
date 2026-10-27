@@ -1,26 +1,131 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Caderno do estudante: papel, pauta, caneta azul, grafite, marca-texto e caneta vermelha */
+  --paper: #fbfcfe;
+  --surface: #ffffff;
+  --ink: #24272d;          /* grafite: títulos e texto forte */
+  --ink-soft: #3a3e46;
+  --text: #2b2e35;
+  --muted: #5c6270;
+  --line: #dae2f0;         /* pauta */
+  --accent: #1d3a9e;       /* tinta de caneta azul: ações, links, foco */
+  --accent-strong: #152c7c;
+  --accent-soft: #e9eefb;
+  --highlight: #f7e463;    /* marca-texto */
+  --margin: #e0796b;       /* linha de margem do caderno */
+  --danger: #be3220;       /* caneta vermelha do professor */
+  --danger-soft: #fcefec;
+  --success: #2a7449;
+  --success-soft: #ebf5ef;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-strong: var(--accent-strong);
+  --color-highlight: var(--highlight);
+  --color-margin: var(--margin);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --font-sans: var(--font-atkinson);
+  --font-serif: var(--font-atkinson);
+  --font-mono: var(--font-atkinson-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--font-atkinson), system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+
+::selection {
+  background: var(--highlight);
+  color: var(--ink);
+}
+
+/* Folha pautada com linha de margem (painel do login) */
+.papel-pautado {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(to right, transparent 70px, var(--margin) 70px, var(--margin) 72px, transparent 72px),
+    linear-gradient(to bottom, transparent 31px, var(--line) 31px);
+  background-size: 100% 100%, 100% 32px;
+}
+
+/* Grifo de marca-texto: metade inferior da linha, como se passa no caderno */
+.grifo {
+  background-image: linear-gradient(transparent 58%, var(--highlight) 58%, var(--highlight) 92%, transparent 92%);
+}
+
+/* Traços do grafo do login desenhados a caneta, uma única vez */
+@keyframes desenhar {
+  to { stroke-dashoffset: 0; }
+}
+
+.traco {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: desenhar 0.9s ease-out forwards;
+}
+
+@keyframes surgir {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.no-grafo {
+  animation: surgir 0.4s ease-out both;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s ease-out both;
+}
+
+/* Painel lateral (menu de perfil) */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s ease-out both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

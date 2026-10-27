@@ -89,14 +89,74 @@ export const recomendarProjetos = async (req: Request, res: Response) => {
   }
 };
 
+// Áreas normalizadas em maiúsculas (como o MERGE dos interesses grava), sem duplicados de caixa
 export const listarAreas = async (req: Request, res: Response) => {
   const session = getSession();
   try {
-    const result = await session.run(`MATCH (a:Area) RETURN a.nome AS nome ORDER BY a.nome`);
+    const result = await session.run(`MATCH (a:Area) RETURN DISTINCT toUpper(a.nome) AS nome ORDER BY nome`);
     const areas = result.records.map(record => record.get('nome'));
     res.json(areas);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar áreas no Neo4j.' });
+  } finally {
+    await session.close();
+  }
+};
+// Interesses atuais de um utilizador
+export const getInteressesUsuario = async (req: Request, res: Response) => {
+  const session = getSession();
+  try {
+    const result = await session.run(
+      `MATCH (:Usuario {id: $perfilId})-[:TEM_INTERESSE]->(a:Area) RETURN a.nome AS nome ORDER BY a.nome`,
+      { perfilId: req.params.perfilId }
+    );
+    res.json(result.records.map(record => record.get('nome')));
+  } catch (error) {
+    console.error('Erro no Neo4j (Interesses):', error);
+    res.status(500).json({ error: 'Erro ao buscar interesses do usuário.' });
+  } finally {
+    await session.close();
+  }
+};
+
+// Substitui todos os interesses do utilizador autenticado (menu de perfil)
+export const substituirInteressesUsuario = async (req: Request, res: Response): Promise<void> => {
+  const perfilId = (req as any).usuario.perfilId;
+  const { nome, interesses } = req.body;
+
+  if (!Array.isArray(interesses) || interesses.filter((i: unknown) => typeof i === 'string' && i.trim()).length === 0) {
+    res.status(400).json({ error: 'Selecione pelo menos uma área de interesse.' });
+    return;
+  }
+
+  const session = getSession();
+  try {
+    await session.executeWrite(async tx => {
+      await tx.run(
+        `
+        MERGE (u:Usuario {id: $perfilId})
+        SET u.nome = coalesce($nome, u.nome)
+        WITH u
+        OPTIONAL MATCH (u)-[r:TEM_INTERESSE]->()
+        DELETE r
+        `,
+        { perfilId, nome: nome ?? null }
+      );
+      await tx.run(
+        `
+        MATCH (u:Usuario {id: $perfilId})
+        UNWIND $interesses AS areaNome
+        WITH u, toUpper(trim(areaNome)) AS nomeArea WHERE nomeArea <> ''
+        MERGE (a:Area {nome: nomeArea})
+        MERGE (u)-[:TEM_INTERESSE]->(a)
+        `,
+        { perfilId, interesses }
+      );
+    });
+    res.json({ mensagem: 'Interesses atualizados com sucesso!' });
+  } catch (error) {
+    console.error('Erro no Neo4j (Interesses):', error);
+    res.status(500).json({ error: 'Erro ao atualizar interesses.' });
   } finally {
     await session.close();
   }

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AppHeader } from '@/components/AppHeader';
+import { Alert, Button, Card, Field, Input, Select, Spinner } from '@/components/ui';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -13,9 +15,10 @@ export default function AdminDashboard() {
   const [curso, setCurso] = useState('');
   const [departamento, setDepartamento] = useState('Exatas');
   const [tipo, setTipo] = useState('ALUNO');
-  
+
   const [mensagem, setMensagem] = useState('');
   const [senhaGerada, setSenhaGerada] = useState('');
+  const [copiada, setCopiada] = useState(false);
   const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
@@ -27,21 +30,21 @@ export default function AdminDashboard() {
   const isCpfValido = (strCPF: string) => {
     let cpfLimpo = strCPF.replace(/[^\d]+/g, '');
     if (cpfLimpo.length !== 11 || /^(\d)\1{10}$/.test(cpfLimpo)) return false;
-    
+
     let soma = 0;
     let resto;
-    
+
     for (let i = 1; i <= 9; i++) soma += parseInt(cpfLimpo.substring(i - 1, i)) * (11 - i);
     resto = (soma * 10) % 11;
     if (resto === 10 || resto === 11) resto = 0;
     if (resto !== parseInt(cpfLimpo.substring(9, 10))) return false;
-    
+
     soma = 0;
     for (let i = 1; i <= 10; i++) soma += parseInt(cpfLimpo.substring(i - 1, i)) * (12 - i);
     resto = (soma * 10) % 11;
     if (resto === 10 || resto === 11) resto = 0;
     if (resto !== parseInt(cpfLimpo.substring(10, 11))) return false;
-    
+
     return true;
   };
 
@@ -54,6 +57,12 @@ export default function AdminDashboard() {
     return senha;
   };
 
+  const copiarSenha = async () => {
+    await navigator.clipboard.writeText(senhaGerada);
+    setCopiada(true);
+    setTimeout(() => setCopiada(false), 2000);
+  };
+
   const registarUtilizador = async (e: React.FormEvent) => {
     e.preventDefault();
     setCarregando(true);
@@ -62,12 +71,12 @@ export default function AdminDashboard() {
 
     // Bloqueia a inserção se o CPF for inválido
     if (!isCpfValido(cpf)) {
-      setMensagem('Erro: O CPF introduzido não é válido. O registo foi bloqueado.');
+      setMensagem('Erro: CPF inválido. Confira os números e tente de novo.');
       setCarregando(false);
       return;
     }
 
-    setMensagem('A registar utilizador...');
+    setMensagem('Cadastrando usuário...');
     const senhaTemporaria = gerarSenhaAutomatica();
 
     try {
@@ -80,7 +89,7 @@ export default function AdminDashboard() {
         headers,
         body: JSON.stringify({ nome, email, cpf, telefone, matricula, tipo, curso, departamento })
       });
-      
+
       const dataPerfil = await resPerfil.json();
       if (!resPerfil.ok) throw new Error(dataPerfil.error || 'Erro ao criar perfil. Verifique se o CPF ou E-mail já existem.');
 
@@ -93,9 +102,9 @@ export default function AdminDashboard() {
 
       if (!resAuth.ok) throw new Error('Erro ao criar credenciais de acesso no serviço de autenticação.');
 
-      setMensagem('Utilizador registado com sucesso!');
+      setMensagem('Usuário cadastrado com sucesso!');
       setSenhaGerada(senhaTemporaria);
-      
+
       // Limpa o formulário
       setNome(''); setEmail(''); setCpf(''); setTelefone(''); setMatricula(''); setCurso(''); setDepartamento('Exatas');
     } catch (err: any) {
@@ -105,83 +114,96 @@ export default function AdminDashboard() {
     }
   };
 
+  const tomMensagem = mensagem.includes('Erro') ? 'error' : mensagem.includes('sucesso') ? 'success' : 'info';
+
   return (
-    <div className="min-h-screen bg-gray-100 text-black p-8">
-      <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md border-t-4 border-red-600">
-        <h1 className="text-2xl font-bold mb-6 text-red-700">Cadastro Institucional</h1>
-        
-        {mensagem && (
-          <div className={`mb-6 p-4 rounded text-sm font-semibold ${mensagem.includes('Erro') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-800'}`}>
-            {mensagem}
-          </div>
-        )}
+    <div className="min-h-screen">
+      <AppHeader papel="ADMIN" />
+
+      <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+        <div className="mb-8">
+          <h1 className="text-[2.25rem] font-bold leading-tight text-ink">Cadastro institucional</h1>
+          <p className="mt-3 text-muted">
+            Cadastre alunos, professores e administradores. O sistema gera uma senha temporária para o primeiro acesso.
+          </p>
+        </div>
 
         {senhaGerada && (
-          <div className="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg text-center">
-            <p className="text-blue-800 font-medium mb-2">Utilizador criado! Copie a senha temporária de primeiro acesso:</p>
-            <p className="text-3xl font-mono font-bold text-blue-900 tracking-wider bg-white py-2 px-4 inline-block rounded shadow-inner border border-blue-100">
-              {senhaGerada}
-            </p>
+          <div className="mb-8 rounded-r-lg border border-l-4 border-line border-l-success bg-surface p-6 sm:p-8">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-bold text-ink">Usuário cadastrado</p>
+                <p className="mt-1 text-sm text-muted">Entregue esta senha temporária ao usuário. Ela não aparece de novo.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="bg-highlight px-3 py-1.5 font-mono text-2xl font-semibold tracking-[0.15em] text-ink">
+                  {senhaGerada}
+                </code>
+                <Button variant="secondary" onClick={copiarSenha}>
+                  {copiada ? 'Copiada ✓' : 'Copiar'}
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 
-        <form onSubmit={registarUtilizador} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">Nome Completo</label>
-              <input type="text" required value={nome} onChange={e => setNome(e.target.value)} className="mt-1 w-full border p-2 rounded focus:ring-red-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">CPF</label>
-              <input type="text" required value={cpf} onChange={e => setCpf(e.target.value)} className="mt-1 w-full border p-2 rounded focus:ring-red-500" placeholder="Apenas números ou com formatação" />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">E-mail Institucional</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 w-full border p-2 rounded focus:ring-red-500" placeholder="@uemg.br ou @discente.uemg.br"/>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">Telefone</label>
-              <input type="text" required value={telefone} onChange={e => setTelefone(e.target.value)} className="mt-1 w-full border p-2 rounded focus:ring-red-500" />
-            </div>
+        <Card className="p-6 sm:p-10">
+          <form onSubmit={registarUtilizador} className="space-y-8">
+            <fieldset>
+              <legend className="mb-5 text-lg font-bold text-ink">Dados pessoais</legend>
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field label="Nome completo">
+                  <Input type="text" required value={nome} onChange={e => setNome(e.target.value)} />
+                </Field>
+                <Field label="CPF">
+                  <Input type="text" required value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" />
+                </Field>
+                <Field label="E-mail institucional">
+                  <Input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="@uemg.br ou @discente.uemg.br" />
+                </Field>
+                <Field label="Telefone">
+                  <Input type="text" required value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(31) 90000-0000" />
+                </Field>
+              </div>
+            </fieldset>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">Matrícula</label>
-              <input type="text" required value={matricula} onChange={e => setMatricula(e.target.value)} className="mt-1 w-full border p-2 rounded focus:ring-red-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">Curso</label>
-              <input type="text" required value={curso} onChange={e => setCurso(e.target.value)} className="mt-1 w-full border p-2 rounded focus:ring-red-500" placeholder="Ex: Sistemas de Informação" />
-            </div>
+            <fieldset>
+              <legend className="mb-5 w-full border-t border-line pt-8 text-lg font-bold text-ink">Vínculo acadêmico</legend>
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field label="Matrícula">
+                  <Input type="text" required value={matricula} onChange={e => setMatricula(e.target.value)} />
+                </Field>
+                <Field label="Curso">
+                  <Input type="text" required value={curso} onChange={e => setCurso(e.target.value)} placeholder="Ex: Sistemas de Informação" />
+                </Field>
+                <Field label="Departamento">
+                  <Select value={departamento} onChange={e => setDepartamento(e.target.value)}>
+                    <option value="Exatas">Ciências Exatas</option>
+                    <option value="Biológicas">Ciências Biológicas</option>
+                    <option value="Humanidades">Ciências Humanas</option>
+                  </Select>
+                </Field>
+                <Field label="Tipo de usuário">
+                  <Select value={tipo} onChange={e => setTipo(e.target.value)}>
+                    <option value="ALUNO">Aluno (Discente)</option>
+                    <option value="PROFESSOR">Professor (Docente)</option>
+                    <option value="ADMIN">Administrador (Reitoria)</option>
+                  </Select>
+                </Field>
+              </div>
+            </fieldset>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">Departamento</label>
-              <select value={departamento} onChange={e => setDepartamento(e.target.value)} className="mt-1 w-full border p-2 rounded focus:ring-red-500">
-                <option value="Exatas">Ciências Exatas</option>
-                <option value="Biológicas">Ciências Biológicas</option>
-                <option value="Humanidades">Ciências Humanidades</option>
-              </select>
+            {mensagem && <Alert tone={tomMensagem}>{mensagem}</Alert>}
+
+            <div className="flex justify-end border-t border-line pt-6">
+              <Button type="submit" disabled={carregando} className="w-full sm:w-auto">
+                {carregando && <Spinner />}
+                {carregando ? 'Cadastrando...' : 'Cadastrar e gerar senha'}
+              </Button>
             </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700">Tipo de Utilizador</label>
-              <select value={tipo} onChange={e => setTipo(e.target.value)} className="mt-1 w-full border p-2 rounded focus:ring-red-500">
-                <option value="ALUNO">Aluno (Discente)</option>
-                <option value="PROFESSOR">Professor (Docente)</option>
-                <option value="ADMIN">Administrador (Reitoria)</option>
-              </select>
-            </div>
-          </div>
-
-          <button type="submit" disabled={carregando} className="w-full bg-red-600 text-white font-bold py-3 rounded-md hover:bg-red-700 mt-4 disabled:opacity-50">
-            {carregando ? 'A processar...' : 'Gerar Registo Institucional e Senha'}
-          </button>
-        </form>
-
-        <button onClick={() => { localStorage.clear(); router.push('/login'); }} className="mt-8 text-sm text-gray-500 font-semibold hover:underline">
-          &larr; Encerrar Sessão de Administrador
-        </button>
-      </div>
+          </form>
+        </Card>
+      </main>
     </div>
   );
 }

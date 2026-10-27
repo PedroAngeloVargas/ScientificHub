@@ -1,0 +1,15 @@
+# Copie para terraform.tfvars e ajuste (terraform.tfvars não deve ir para o Git)
+
+projeto_id = "meu-projeto-gcp"
+regiao     = "us-central1"
+zona       = "us-central1-a"
+
+# O seu IP público (curl ifconfig.me) para usar o kubectl
+redes_autorizadas_control_plane = ["200.100.50.25/32"]
+
+# Opcionais (valores padrão já otimizados para custo)
+# gke_tipo_maquina = "e2-medium"
+# gke_nos_min      = 1
+# gke_nos_max      = 3
+# gke_spot         = true
+# db_tipo_maquina  = "e2-micro"

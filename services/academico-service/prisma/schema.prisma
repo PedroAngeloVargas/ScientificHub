@@ -17,6 +17,12 @@ enum CategoriaPublicacao {
   RELATORIO_TECNICO
 }
 
+enum StatusPublicacao {
+  PENDENTE  // Aguarda avaliação do orientador
+  APROVADA
+  REJEITADA
+}
+
 enum TipoProjeto {
   PESQUISA
   EXTENSAO
@@ -31,7 +37,12 @@ model Publicacao {
   
   autorPrincipalId String             
   orientadorId     String?            // <-- NOVO: ID do Professor (Opcional, pois artigos podem não ter)
-  
+
+  // Publicações com orientador nascem PENDENTE; sem orientador já entram APROVADA
+  status          StatusPublicacao    @default(APROVADA)
+  parecer         String?             // Comentário do orientador (obrigatório ao rejeitar)
+  avaliadoEm      DateTime?
+
   dataPublicacao  DateTime
   criadoEm        DateTime            @default(now())
 
@@ -58,4 +69,52 @@ model Projeto {
 
   @@index([coordenadorId])
   @@map("projetos")
+}
+
+// ---------- Comunidade (feed social de divulgações) ----------
+
+enum CategoriaPostagem {
+  GERAL
+  EVENTO
+  OPORTUNIDADE
+  DUVIDA
+  CONQUISTA
+}
+
+model Postagem {
+  id          String            @id @default(uuid())
+  autorId     String            // "Soft Reference" para o perfil-service
+  conteudo    String
+  categoria   CategoriaPostagem @default(GERAL)
+  imagemUrl   String?           // Caminho da imagem guardada pelo Multer
+
+  curtidas    Curtida[]
+  comentarios Comentario[]
+
+  criadoEm    DateTime          @default(now())
+
+  @@index([criadoEm])
+  @@map("postagens")
+}
+
+model Curtida {
+  postagemId String
+  usuarioId  String
+  postagem   Postagem @relation(fields: [postagemId], references: [id], onDelete: Cascade)
+  criadoEm   DateTime @default(now())
+
+  @@id([postagemId, usuarioId]) // Cada utilizador só curte uma vez
+  @@map("curtidas")
+}
+
+model Comentario {
+  id         String   @id @default(uuid())
+  postagemId String
+  autorId    String
+  conteudo   String
+  postagem   Postagem @relation(fields: [postagemId], references: [id], onDelete: Cascade)
+  criadoEm   DateTime @default(now())
+
+  @@index([postagemId])
+  @@map("comentarios")
 }

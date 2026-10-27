@@ -1,0 +1,226 @@
+name: Infra GCP (Terraform)
+
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: "Ação do Terraform"
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+      confirmar_destroy:
+        description: "Para destroy, digite o ID do projeto GCP"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  id-token: write  
+
+concurrency:
+  group: terraform-gcp
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: 1.9.8
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VAR_projeto_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_regiao: ${{ vars.GCP_REGION || 'us-central1' }}
+  TF_VAR_zona: ${{ vars.GCP_ZONE || 'us-central1-a' }}
+  TF_VAR_redes_autorizadas_control_plane: ${{ vars.GKE_AUTHORIZED_NETWORKS }}
+
+defaults:
+  run:
+    working-directory: infra/GCP
+
+jobs:
+  plan:
+    name: Plan
+    if: inputs.acao != 'destroy'
+    runs-on: ubuntu-latest
+    outputs:
+      tem_mudancas: ${{ steps.plan.outputs.tem_mudancas }}
+      custo_mensal: ${{ steps.custo.outputs.custo_mensal }}
+    env:
+      # Permite usar a presença do secret em condições de passo
+      TEM_INFRACOST: ${{ secrets.INFRACOST_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Autenticar na GCP (sem chave JSON)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TF_SERVICE_ACCOUNT }}
+
+      - name: Formatação
+        run: terraform fmt -check -recursive -diff
+
+      - name: Init
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: Validate
+        run: terraform validate -no-color
+
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -no-color -detailed-exitcode -out=tfplan
+          codigo=$?
+          set -e
+          # 0 = sem mudanças, 2 = com mudanças, 1 = erro
+          if [ "$codigo" -eq 1 ]; then exit 1; fi
+          echo "tem_mudancas=$([ "$codigo" -eq 2 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          terraform show -no-color tfplan > plan.txt
+
+      - name: Resumo do plano
+        run: |
+          {
+            echo "## Terraform plan"
+            echo '```'
+            grep -E '^Plan:|^No changes' plan.txt || echo "Veja o log do passo Plan."
+            echo '```'
+            echo "<details><summary>Plano completo</summary>"
+            echo
+            echo '```hcl'
+            head -c 60000 plan.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: infracost/actions/setup@v3
+        if: env.TEM_INFRACOST == 'true'
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      # Estimativa de custo a partir do plano, para decidir antes de aprovar o apply
+      - name: Custo estimado (Infracost)
+        id: custo
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          if [ -z "$INFRACOST_API_KEY" ]; then
+            echo "::warning::Secret INFRACOST_API_KEY não configurado. Estimativa de custo ignorada."
+            exit 0
+          fi
+          terraform show -json tfplan > plan.json
+          infracost breakdown --path plan.json --format json --out-file infracost.json
+
+          # Tabela completa no log
+          infracost output --path infracost.json --format table
+
+          total=$(jq -r '.totalMonthlyCost // "0"' infracost.json)
+          moeda=$(jq -r '.currency // "USD"' infracost.json)
+          echo "custo_mensal=${total} ${moeda}" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Custo mensal estimado::${total} ${moeda} por mês"
+
+          # Tabela no resumo da execução (visível na página do run, antes da aprovação)
+          {
+            echo "## Custo mensal estimado: ${total} ${moeda}"
+            echo
+            echo "> Estimativa do Infracost a partir do plano, em preços de tabela. Não desconta o free tier da GCP"
+            echo "> (e2-micro e taxa de gestão de 1 cluster GKE zonal). Itens cobrados por uso, como tráfego do NAT,"
+            echo "> egress e logs, aparecem sem valor porque dependem do volume real."
+            echo
+            echo '```'
+            infracost output --path infracost.json --format table --show-skipped
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # O apply usa exatamente este plano (e o mesmo lock dos providers)
+      - name: Guardar o plano
+        if: steps.plan.outputs.tem_mudancas == 'true' && inputs.acao == 'apply'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: |
+            infra/GCP/tfplan
+            infra/GCP/.terraform.lock.hcl
+          retention-days: 5
+
+  apply:
+    name: Apply
+    needs: plan
+    if: inputs.acao == 'apply' && needs.plan.outputs.tem_mudancas == 'true'
+    runs-on: ubuntu-latest
+    environment: producao  
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Autenticar na GCP (sem chave JSON)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TF_SERVICE_ACCOUNT }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infra/GCP
+
+      - name: Init
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: Apply
+        env:
+          CUSTO: ${{ needs.plan.outputs.custo_mensal }}
+        run: |
+          echo "Custo mensal estimado aprovado: ${CUSTO:-não calculado}"
+          terraform apply -no-color tfplan
+
+      - name: Saídas
+        run: |
+          {
+            echo "## Infraestrutura aplicada"
+            echo '```'
+            terraform output -no-color
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  destroy:
+    name: Destroy
+    if: inputs.acao == 'destroy'
+    runs-on: ubuntu-latest
+    environment: producao
+    steps:
+      - name: Confirmar
+        working-directory: .
+        env:
+          CONFIRMACAO: ${{ inputs.confirmar_destroy }}
+          PROJETO: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          if [ "$CONFIRMACAO" != "$PROJETO" ]; then
+            echo "::error::Para destruir a infraestrutura, digite exatamente o ID do projeto GCP."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Autenticar na GCP (sem chave JSON)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TF_SERVICE_ACCOUNT }}
+
+      - name: Init
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: Destroy
+        run: terraform destroy -no-color -auto-approve

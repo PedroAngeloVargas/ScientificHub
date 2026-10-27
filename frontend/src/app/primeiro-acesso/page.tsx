@@ -1,7 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { Alert, Button, Card, Field, Input, Logo, Spinner } from '@/components/ui';
+import { formatarArea } from '@/lib/formato';
+
+function Etapa({ numero, titulo, descricao, children }: { numero: number; titulo: string; descricao: string; children: ReactNode }) {
+  return (
+    <section className="grid gap-6 border-t border-line py-8 first:border-t-0 first:pt-0 md:grid-cols-[220px_1fr]">
+      <div>
+        <span className="mb-3 grid h-8 w-8 place-items-center rounded-full bg-accent text-sm font-bold text-white">
+          {numero}
+        </span>
+        <h3 className="text-lg font-bold text-ink">{titulo}</h3>
+        <p className="mt-1 text-sm leading-relaxed text-muted">{descricao}</p>
+      </div>
+      <div>{children}</div>
+    </section>
+  );
+}
 
 export default function PrimeiroAcesso() {
   const router = useRouter();
@@ -9,10 +26,10 @@ export default function PrimeiroAcesso() {
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [telefone, setTelefone] = useState('');
   const [endereco, setEndereco] = useState('');
-  
+
   const [areasDisponiveis, setAreasDisponiveis] = useState<string[]>([]);
   const [areasSelecionadas, setAreasSelecionadas] = useState<string[]>([]);
-  
+
   const [mensagem, setMensagem] = useState('');
   const [carregando, setCarregando] = useState(false);
 
@@ -36,7 +53,7 @@ export default function PrimeiroAcesso() {
   }, [router]);
 
   const toggleArea = (area: string) => {
-    setAreasSelecionadas(prev => 
+    setAreasSelecionadas(prev =>
       prev.includes(area) ? prev.filter(a => a !== area) : [...prev, area]
     );
   };
@@ -84,72 +101,101 @@ export default function PrimeiroAcesso() {
       // Aguarda todos os microsserviços processarem
       await Promise.all([reqAuth, reqPerfil, reqMatch]);
 
-      setMensagem('Perfil configurado com sucesso! A redirecionar para o Hub...');
-      setTimeout(() => router.push('/feed'), 2000);
+      setMensagem('Perfil salvo com sucesso. Agora, ative a verificação em duas etapas.');
+      // Próximo passo obrigatório: configurar o MFA
+      setTimeout(() => router.push('/configurar-mfa'), 2000);
     } catch (err) {
-      setMensagem('Ocorreu um erro ao guardar as configurações.');
+      setMensagem('Erro: não foi possível salvar. Verifique sua conexão e tente de novo.');
       setCarregando(false);
     }
   };
 
+  const tomMensagem = mensagem.includes('Erro') ? 'error' : mensagem.includes('sucesso') ? 'success' : 'info';
+
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="max-w-3xl w-full bg-white rounded-lg shadow-lg border-t-4 border-blue-600 p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Bem-vindo(a) ao ScientificHub!</h1>
-        <p className="text-gray-600 mb-6">Como este é o seu primeiro acesso, precisamos de configurar a sua segurança e o seu perfil para o motor de recomendações.</p>
+    <div className="min-h-screen px-4 py-10 sm:px-6 sm:py-16">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-10 flex items-center justify-between">
+          <Logo />
+          <span className="text-sm text-muted">Primeiro acesso</span>
+        </div>
 
-        {mensagem && (
-          <div className={`p-4 rounded mb-6 text-sm font-semibold ${mensagem.includes('Erro') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-            {mensagem}
-          </div>
-        )}
+        <div className="mb-10">
+          <h1 className="text-[2.25rem] font-bold leading-tight text-ink">Bem-vindo(a) ao ScientificHub</h1>
+          <p className="mt-3 max-w-2xl leading-relaxed text-muted">
+            Antes de começar, troque sua senha e conte quais temas você pesquisa. Com isso, o Hub sugere os projetos
+            e orientadores certos para você.
+          </p>
+        </div>
 
-        <form onSubmit={concluirConfiguracao} className="space-y-6 text-black">
-          <div className="bg-gray-100 p-4 rounded border border-gray-200">
-            <h3 className="font-bold text-lg mb-4">1. Segurança</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700">Nova Senha</label>
-                <input type="password" required value={novaSenha} onChange={e => setNovaSenha(e.target.value)} className="mt-1 w-full border p-2 rounded" />
+        <Card className="p-6 sm:p-10">
+          <form onSubmit={concluirConfiguracao}>
+            <Etapa numero={1} titulo="Segurança" descricao="Substitua a senha temporária recebida da Reitoria.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Nova senha">
+                  <Input type="password" required value={novaSenha} onChange={e => setNovaSenha(e.target.value)} autoComplete="new-password" />
+                </Field>
+                <Field label="Confirmar nova senha">
+                  <Input type="password" required value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} autoComplete="new-password" />
+                </Field>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700">Confirmar Nova Senha</label>
-                <input type="password" required value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} className="mt-1 w-full border p-2 rounded" />
+            </Etapa>
+
+            <Etapa numero={2} titulo="Contato" descricao="Informações opcionais para facilitar a comunicação.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Telefone" hint="Opcional">
+                  <Input type="text" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(31) 90000-0000" />
+                </Field>
+                <Field label="Endereço" hint="Opcional">
+                  <Input type="text" value={endereco} onChange={e => setEndereco(e.target.value)} />
+                </Field>
+              </div>
+            </Etapa>
+
+            <Etapa numero={3} titulo="Áreas de interesse" descricao="Temas que deseja pesquisar ou orientar. Usados nas recomendações.">
+              {areasDisponiveis.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-sm text-muted">
+                  Nenhuma área cadastrada ainda.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {areasDisponiveis.map(area => {
+                    const ativa = areasSelecionadas.includes(area);
+                    return (
+                      <button
+                        type="button"
+                        key={area}
+                        onClick={() => toggleArea(area)}
+                        aria-pressed={ativa}
+                        className={`cursor-pointer rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                          ativa
+                            ? 'border-ink bg-highlight text-ink'
+                            : 'border-line bg-surface text-text hover:border-accent'
+                        }`}
+                      >
+                        {ativa && <span className="mr-1.5">✓</span>}
+                        {formatarArea(area)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="mt-3 text-xs text-muted">
+                {areasSelecionadas.length} {areasSelecionadas.length === 1 ? 'área selecionada' : 'áreas selecionadas'}
+              </p>
+            </Etapa>
+
+            <div className="space-y-4 border-t border-line pt-8">
+              {mensagem && <Alert tone={tomMensagem}>{mensagem}</Alert>}
+              <div className="flex justify-end">
+                <Button type="submit" disabled={carregando} className="w-full sm:w-auto">
+                  {carregando && <Spinner />}
+                  {carregando ? 'Salvando...' : 'Salvar e continuar'}
+                </Button>
               </div>
             </div>
-          </div>
-
-          <div className="bg-gray-100 p-4 rounded border border-gray-200">
-            <h3 className="font-bold text-lg mb-4">2. Dados de Contacto</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700">Telefone (Opcional)</label>
-                <input type="text" value={telefone} onChange={e => setTelefone(e.target.value)} className="mt-1 w-full border p-2 rounded" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700">Endereço (Opcional)</label>
-                <input type="text" value={endereco} onChange={e => setEndereco(e.target.value)} className="mt-1 w-full border p-2 rounded" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-100 p-4 rounded border border-gray-200">
-            <h3 className="font-bold text-lg mb-2">3. Áreas de Interesse (Para Recomendações)</h3>
-            <p className="text-sm text-gray-500 mb-4">Selecione os temas sobre os quais tem interesse em pesquisar ou orientar projetos.</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {areasDisponiveis.map(area => (
-                <label key={area} className="flex items-center space-x-2 cursor-pointer bg-white p-2 rounded border hover:bg-blue-50 transition-colors">
-                  <input type="checkbox" checked={areasSelecionadas.includes(area)} onChange={() => toggleArea(area)} className="w-4 h-4 text-blue-600 rounded" />
-                  <span className="text-sm font-medium">{area}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <button type="submit" disabled={carregando} className="w-full py-3 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 disabled:opacity-50">
-            {carregando ? 'A configurar...' : 'Concluir Configuração e Aceder ao Hub'}
-          </button>
-        </form>
+          </form>
+        </Card>
       </div>
     </div>
   );

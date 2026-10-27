@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { getPublicacoes, createPublicacao } from '../controllers/publicacaoController.js';
+import { getPublicacoes, createPublicacao, getOrientacoes, avaliarPublicacao } from '../controllers/publicacaoController.js';
 import { verificarToken } from '../middlewares/authMiddleware.js';
 
 // Configuração do Multer
@@ -33,5 +33,9 @@ router.get('/', getPublicacoes);
 
 // Injeta o upload.single('arquivo') ANTES de chamar o controller
 router.post('/', verificarToken, upload.single('arquivo'), createPublicacao);
+
+// Aprovação pelo professor orientador
+router.get('/orientacoes', verificarToken, getOrientacoes);
+router.patch('/:id/avaliacao', verificarToken, avaliarPublicacao);
 
 export default router;
