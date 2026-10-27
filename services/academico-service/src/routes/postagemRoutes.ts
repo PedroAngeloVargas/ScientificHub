@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
-import path from 'path';
 import {
   getPostagens,
   createPostagem,
@@ -15,19 +14,9 @@ import { verificarToken } from '../middlewares/authMiddleware.js';
 
 const TIPOS_IMAGEM = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-// Configuração do Multer para imagens das postagens (mesma pasta dos PDFs)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    // Nome aleatório + extensão original, para não expor o nome do ficheiro do utilizador
-    cb(null, `post-${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname).toLowerCase()}`);
-  }
-});
-
+// A imagem fica em memória; o controller grava-a no Cloud Storage (ou em uploads/ localmente)
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (req, file, cb) => {
     if (TIPOS_IMAGEM.includes(file.mimetype)) {

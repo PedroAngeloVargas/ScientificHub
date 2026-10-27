@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Site estático (HTML/JS/CSS em out/): todas as páginas buscam os dados no navegador,
+  // então em produção basta um nginx a servir ficheiros, sem servidor Node.
+  output: "export",
   reactCompiler: true,
   turbopack: {
     rules: {

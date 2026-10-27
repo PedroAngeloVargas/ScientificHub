@@ -1,0 +1,112 @@
+# Gera as imagens Docker e envia ao Artifact Registry. Só roda manualmente (aba Actions).
+# Cada imagem recebe duas tags: o hash curto do commit (usado no deploy) e "latest".
+# Pré-requisitos: infra aplicada (repositório do registry e conta de deploy criados) e a variável
+# GCP_DEPLOY_SERVICE_ACCOUNT configurada com o output "deploy_service_account" do Terraform.
+name: Imagens (Artifact Registry)
+
+on:
+  workflow_dispatch:
+    inputs:
+      servico:
+        description: "Imagem a gerar"
+        type: choice
+        options: [todos, frontend, auth-service, perfil-service, academico-service, match-service]
+        default: todos
+
+permissions:
+  contents: read
+  id-token: write  # Token OIDC para a Workload Identity Federation
+
+env:
+  REGISTRY: ${{ vars.GCP_REGION || 'us-central1' }}-docker.pkg.dev
+  REPOSITORIO: ${{ vars.GCP_PROJECT_ID }}/scientifichub
+
+jobs:
+  preparar:
+    name: Selecionar imagens
+    runs-on: ubuntu-latest
+    outputs:
+      matriz: ${{ steps.matriz.outputs.matriz }}
+    steps:
+      - id: matriz
+        env:
+          SERVICO: ${{ inputs.servico }}
+        run: |
+          todas='[
+            {"nome": "frontend",          "contexto": "frontend"},
+            {"nome": "auth-service",      "contexto": "services/auth-service"},
+            {"nome": "perfil-service",    "contexto": "services/perfil-service"},
+            {"nome": "academico-service", "contexto": "services/academico-service"},
+            {"nome": "match-service",     "contexto": "services/match-service"}
+          ]'
+          if [ "$SERVICO" = "todos" ]; then
+            echo "matriz=$(echo "$todas" | jq -c .)" >> "$GITHUB_OUTPUT"
+          else
+            echo "matriz=$(echo "$todas" | jq -c --arg s "$SERVICO" '[.[] | select(.nome == $s)]')" >> "$GITHUB_OUTPUT"
+          fi
+
+  imagem:
+    name: ${{ matrix.nome }}
+    needs: preparar
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # Uma imagem com erro não cancela as outras
+      matrix:
+        include: ${{ fromJSON(needs.preparar.outputs.matriz) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autenticar na GCP (sem chave JSON)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Login no Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Definir tags
+        id: tags
+        env:
+          NOME: ${{ matrix.nome }}
+        run: |
+          imagem="${REGISTRY}/${REPOSITORIO}/${NOME}"
+          versao="${GITHUB_SHA::7}"
+          echo "imagem=${imagem}" >> "$GITHUB_OUTPUT"
+          echo "versao=${versao}" >> "$GITHUB_OUTPUT"
+          echo "tags=${imagem}:${versao},${imagem}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Build e push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.contexto }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          # Cache das camadas entre execuções (npm ci só roda de novo se o package-lock mudar)
+          cache-from: type=gha,scope=${{ matrix.nome }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.nome }}
+          provenance: false
+
+      - name: Resumo
+        env:
+          NOME: ${{ matrix.nome }}
+          IMAGEM: ${{ steps.tags.outputs.imagem }}
+          VERSAO: ${{ steps.tags.outputs.versao }}
+        run: |
+          {
+            echo "### ${NOME}"
+            echo '```'
+            echo "${IMAGEM}:${VERSAO}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

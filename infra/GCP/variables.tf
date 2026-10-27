@@ -98,6 +98,22 @@ variable "protecao_exclusao" {
   default     = false
 }
 
+# ---------- Pipelines ----------
+
+variable "repositorio_github" {
+  description = "Repositório (dono/nome) autorizado a usar a conta de deploy via Workload Identity Federation."
+  type        = string
+  default     = "PedroAngeloVargas/ScientificHub"
+}
+
+# ---------- Uploads ----------
+
+variable "bucket_uploads" {
+  description = "Nome do bucket de uploads criado pelo bootstrap. Vazio = \"<projeto_id>-uploads\"."
+  type        = string
+  default     = ""
+}
+
 # ---------- VM do PostgreSQL ----------
 
 variable "db_tipo_maquina" {
@@ -107,9 +123,15 @@ variable "db_tipo_maquina" {
 }
 
 variable "db_disco_gb" {
-  description = "Disco de boot da VM do banco (GB). O free tier cobre até 30 GB pd-standard."
+  description = "Disco de sistema da VM do banco (GB). Somado ao disco de dados (20 GB, criado pelo bootstrap) fica nos 30 GB pd-standard do free tier."
   type        = number
-  default     = 30
+  default     = 10
+}
+
+variable "db_disco_dados" {
+  description = "Nome do disco de dados do PostgreSQL criado pelo bootstrap. Vazio = \"<prefixo>-postgres-dados\"."
+  type        = string
+  default     = ""
 }
 
 variable "db_imagem" {

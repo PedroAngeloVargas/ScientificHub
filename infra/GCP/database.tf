@@ -6,6 +6,13 @@ resource "google_compute_address" "db_interno" {
   address      = cidrhost(var.cidr_subnet_db, 10)
 }
 
+# Disco de dados do PostgreSQL: criado pelo bootstrap/setup-pipeline.sh, fora deste Terraform,
+# para que o "terraform destroy" (usado para poupar créditos) não apague o banco. A VM recriada volta a usá-lo.
+data "google_compute_disk" "postgres_dados" {
+  name = var.db_disco_dados != "" ? var.db_disco_dados : "${var.prefixo}-postgres-dados"
+  zone = var.zona
+}
+
 resource "google_compute_instance" "postgres" {
   name         = "${var.prefixo}-postgres"
   zone         = var.zona
@@ -20,13 +27,19 @@ resource "google_compute_instance" "postgres" {
     automatic_restart  = true
   }
 
+  # Disco de sistema: descartável, recriado junto com a VM
   boot_disk {
     initialize_params {
       image = var.db_imagem
       size  = var.db_disco_gb
       type  = "pd-standard"
     }
-    auto_delete = false # Mantém o disco (e os dados) se a VM for recriada por engano
+  }
+
+  # Disco de dados (aparece na VM como /dev/disk/by-id/google-dados; monte-o em /var/lib/postgresql)
+  attached_disk {
+    source      = data.google_compute_disk.postgres_dados.self_link
+    device_name = "dados"
   }
 
   network_interface {
@@ -55,7 +68,7 @@ resource "google_compute_instance" "postgres" {
   depends_on = [google_compute_router_nat.nat]
 }
 
-# Snapshot diário do disco do banco (retém 7 dias)
+# Snapshot diário do disco de dados do banco (retém 7 dias)
 resource "google_compute_resource_policy" "backup_db" {
   name   = "${var.prefixo}-postgres-backup"
   region = var.regiao
@@ -76,6 +89,6 @@ resource "google_compute_resource_policy" "backup_db" {
 
 resource "google_compute_disk_resource_policy_attachment" "backup_db" {
   name = google_compute_resource_policy.backup_db.name
-  disk = google_compute_instance.postgres.name # O disco de boot herda o nome da VM
+  disk = data.google_compute_disk.postgres_dados.name
   zone = var.zona
 }

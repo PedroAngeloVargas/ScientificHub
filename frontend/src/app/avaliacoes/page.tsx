@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/AppHeader';
 import { Alert, Badge, Button, Card, Spinner, Textarea } from '@/components/ui';
+import { urlArquivo } from '@/lib/arquivos';
 
 type Status = 'PENDENTE' | 'APROVADA' | 'REJEITADA';
 
@@ -41,8 +42,6 @@ const estilosStatus: Record<Status, { rotulo: string; classe: string }> = {
   REJEITADA: { rotulo: 'Rejeitada', classe: 'bg-danger-soft text-danger' },
 };
 
-// Os PDFs são servidos na raiz do academico-service (/uploads), fora do prefixo /api
-const origemAcademico = new URL(process.env.NEXT_PUBLIC_ACADEMICO_URL ?? 'http://localhost:3002').origin;
 
 const formatarData = (iso: string) =>
   new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -212,7 +211,7 @@ export default function Avaliacoes() {
 
                   {pub.arquivoUrl && (
                     <a
-                      href={`${origemAcademico}${pub.arquivoUrl}`}
+                      href={urlArquivo(pub.arquivoUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-accent underline decoration-accent/40 decoration-2 underline-offset-4 hover:decoration-accent"

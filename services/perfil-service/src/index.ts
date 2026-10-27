@@ -9,6 +9,11 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Usada pelo Kubernetes e pelo Load Balancer para saber se o serviço está pronto
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
 // Rota base do serviço
 app.use('/api/usuarios', usuarioRoutes);
 

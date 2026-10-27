@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/AppHeader';
 import { Alert, Badge, Button, Card, Spinner, Textarea } from '@/components/ui';
+import { urlArquivo } from '@/lib/arquivos';
 
 type Categoria = 'GERAL' | 'EVENTO' | 'OPORTUNIDADE' | 'DUVIDA' | 'CONQUISTA';
 
@@ -49,8 +50,6 @@ const rotulosPapel: Record<string, string> = {
 
 const MAX_POSTAGEM = 2000;
 
-// As imagens são servidas na raiz do academico-service (/uploads), fora do prefixo /api
-const origemAcademico = new URL(process.env.NEXT_PUBLIC_ACADEMICO_URL ?? 'http://localhost:3002').origin;
 const API = `${process.env.NEXT_PUBLIC_ACADEMICO_URL}/postagens`;
 
 const authHeaders = (): Record<string, string> => ({ 'Authorization': `Bearer ${localStorage.getItem('hub_token')}` });
@@ -319,10 +318,10 @@ function CartaoPostagem({
         <p className="mt-4 whitespace-pre-line break-words text-[15px] leading-relaxed text-text">{postagem.conteudo}</p>
 
         {postagem.imagemUrl && (
-          <a href={`${origemAcademico}${postagem.imagemUrl}`} target="_blank" rel="noopener noreferrer" className="mt-4 block">
+          <a href={urlArquivo(postagem.imagemUrl)} target="_blank" rel="noopener noreferrer" className="mt-4 block">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`${origemAcademico}${postagem.imagemUrl}`}
+              src={urlArquivo(postagem.imagemUrl)}
               alt=""
               loading="lazy"
               className="max-h-[28rem] w-full rounded-md border border-line object-cover"

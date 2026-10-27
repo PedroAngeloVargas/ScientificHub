@@ -1,20 +1,20 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { apagarArquivo, salvarArquivo } from '../lib/armazenamento.js';
 import type { AuthRequest } from '../middlewares/authMiddleware.js';
 
 export const createPublicacao = async (req: Request, res: Response): Promise<void> => {
   // Quando usamos multer, os campos de texto vêm em req.body e o ficheiro em req.file
   const { titulo, resumo, categoria, autorPrincipalId, orientadorId, dataPublicacao } = req.body;
   
-  // Captura o caminho do ficheiro salvo pelo multer (se existir)
-  const arquivoUrl = req.file ? `/uploads/${req.file.filename}` : null;
-
   if (!req.file) {
     res.status(400).json({ error: 'O upload do arquivo PDF é obrigatório.' });
     return;
   }
 
+  let arquivoUrl: string | null = null;
   try {
+    arquivoUrl = await salvarArquivo(req.file, 'pdf');
     const nova = await prisma.publicacao.create({
       data: { 
         titulo, 
@@ -31,6 +31,7 @@ export const createPublicacao = async (req: Request, res: Response): Promise<voi
     res.status(201).json(nova);
   } catch (error) {
     console.error("ERRO DO PRISMA:", error);
+    await apagarArquivo(arquivoUrl); // Não deixa o PDF órfão se o registo falhar
     res.status(500).json({ error: 'Erro ao criar publicação' });
   }
 };

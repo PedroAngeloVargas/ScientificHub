@@ -32,3 +32,18 @@ output "artifact_registry" {
   description = "Prefixo das imagens Docker (docker push <prefixo>/auth-service:tag)."
   value       = "${var.regiao}-docker.pkg.dev/${var.projeto_id}/${google_artifact_registry_repository.imagens.repository_id}"
 }
+
+output "bucket_uploads" {
+  description = "Bucket dos PDFs e imagens (variável GCS_BUCKET do academico-service)."
+  value       = local.bucket_uploads
+}
+
+output "academico_service_account" {
+  description = "Conta GCP do academico-service (anotação iam.gke.io/gcp-service-account da ServiceAccount do Kubernetes)."
+  value       = google_service_account.academico.email
+}
+
+output "deploy_service_account" {
+  description = "Conta da pipeline de imagens/deploy (variável GCP_DEPLOY_SERVICE_ACCOUNT no GitHub)."
+  value       = google_service_account.deploy.email
+}

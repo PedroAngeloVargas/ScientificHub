@@ -5,6 +5,7 @@ locals {
     "container.googleapis.com",
     "artifactregistry.googleapis.com",
     "iap.googleapis.com",
+    "storage.googleapis.com",
   ]
 }
 

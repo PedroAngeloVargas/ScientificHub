@@ -1,7 +1,6 @@
 import type { Response } from 'express';
-import fs from 'fs/promises';
-import path from 'path';
 import { prisma } from '../lib/prisma.js';
+import { apagarArquivo, salvarArquivo } from '../lib/armazenamento.js';
 import type { AuthRequest } from '../middlewares/authMiddleware.js';
 
 const CATEGORIAS = ['GERAL', 'EVENTO', 'OPORTUNIDADE', 'DUVIDA', 'CONQUISTA'] as const;
@@ -12,11 +11,6 @@ const POR_PAGINA = 15;
 // A Reitoria pode moderar (apagar) qualquer conteúdo
 const isAdmin = (req: AuthRequest) => req.usuario.email === 'admin@uemg.br';
 
-// Apaga do disco a imagem enviada (usado em erros e na exclusão da postagem)
-const apagarImagem = async (imagemUrl: string | null | undefined) => {
-  if (!imagemUrl) return;
-  await fs.unlink(path.join(process.cwd(), imagemUrl)).catch(() => {});
-};
 
 export const getPostagens = async (req: AuthRequest, res: Response) => {
   const perfilId = req.usuario.perfilId;
@@ -55,20 +49,19 @@ export const getPostagens = async (req: AuthRequest, res: Response) => {
 export const createPostagem = async (req: AuthRequest, res: Response): Promise<void> => {
   const conteudo = String(req.body.conteudo ?? '').trim();
   const categoria = req.body.categoria ?? 'GERAL';
-  const imagemUrl = req.file ? `/uploads/${req.file.filename}` : null;
-
   if (!conteudo || conteudo.length > MAX_POSTAGEM) {
-    await apagarImagem(imagemUrl);
     res.status(400).json({ error: `A postagem deve ter entre 1 e ${MAX_POSTAGEM} caracteres.` });
     return;
   }
   if (!CATEGORIAS.includes(categoria)) {
-    await apagarImagem(imagemUrl);
     res.status(400).json({ error: 'Categoria inválida.' });
     return;
   }
 
+  // Só grava a imagem depois de o texto e a categoria serem válidos
+  let imagemUrl: string | null = null;
   try {
+    if (req.file) imagemUrl = await salvarArquivo(req.file, 'post');
     const nova = await prisma.postagem.create({
       // O autor vem sempre do token, nunca do corpo da requisição
       data: { autorId: req.usuario.perfilId, conteudo, categoria, imagemUrl },
@@ -76,7 +69,7 @@ export const createPostagem = async (req: AuthRequest, res: Response): Promise<v
     res.status(201).json({ ...nova, totalCurtidas: 0, totalComentarios: 0, curtidoPorMim: false });
   } catch (error) {
     console.error('ERRO DO PRISMA:', error);
-    await apagarImagem(imagemUrl);
+    await apagarArquivo(imagemUrl);
     res.status(500).json({ error: 'Erro ao publicar a postagem.' });
   }
 };
@@ -96,7 +89,7 @@ export const deletePostagem = async (req: AuthRequest, res: Response): Promise<v
 
     // Curtidas e comentários são removidos em cascata
     await prisma.postagem.delete({ where: { id } });
-    await apagarImagem(postagem.imagemUrl);
+    await apagarArquivo(postagem.imagemUrl);
     res.status(204).end();
   } catch (error) {
     console.error('ERRO DO PRISMA:', error);

@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+# Nunca levar .env.local para a imagem: as URLs de localhost ficariam embutidas no build
+.env
+.env.*
+!.env.example
+npm-debug.log*
+Dockerfile
+.dockerignore
