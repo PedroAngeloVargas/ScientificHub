@@ -20,6 +20,8 @@ spec:
       annotations:
         scientifichub/segredos: {{ .Values.segredos.checksum | quote }}
     spec:
+      # Não injeta variáveis dos Services (ex: NEO4J_PORT_7687_TCP_PORT): o Neo4j recusa variáveis NEO4J_* desconhecidas
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 7474

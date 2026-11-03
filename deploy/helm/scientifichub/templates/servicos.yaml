@@ -27,6 +27,7 @@ spec:
         scientifichub/deploy: {{ now | unixEpoch | quote }}
         {{- end }}
     spec:
+      enableServiceLinks: false
       {{- if $s.usaBucket }}
       serviceAccountName: {{ $nome }}
       {{- end }}
