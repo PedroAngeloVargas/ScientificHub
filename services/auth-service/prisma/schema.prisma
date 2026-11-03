@@ -17,6 +17,8 @@ model Credencial {
   primeiroAcesso Boolean  @default(true) // <-- NOVO: Força a troca de senha
   mfaSecret     String?  // Segredo TOTP (gerado na configuração, só vale depois de ativado)
   mfaAtivo      Boolean  @default(false)
+  ativo         Boolean  @default(true)   // false = conta desativada pela Reitoria (sem acesso; os dados ficam)
+  senhaTemporaria Boolean @default(false) // true = senha gerada pela Reitoria; a troca é obrigatória
   criadoEm      DateTime @default(now())
 
   @@map("credenciais")

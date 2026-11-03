@@ -54,6 +54,9 @@ spec:
                 secretKeyRef:
                   name: {{ $.Values.segredos.nome }}
                   key: JWT_SECRET
+            # Cada serviço confirma com o auth-service se a conta continua ativa (rota interna, fora do Ingress)
+            - name: AUTH_INTERNAL_URL
+              value: http://auth-service:{{ index $.Values.servicos "auth-service" "porta" }}
             {{- if $s.schemaPrisma }}
             {{- include "scientifichub.envPostgres" (list $ $s.schemaPrisma) | nindent 12 }}
             {{- end }}

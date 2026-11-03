@@ -30,4 +30,5 @@ AGENTS.md
 /frontend/README.md
 /frontend/public
 *.png
+/deploy/neo4j
 

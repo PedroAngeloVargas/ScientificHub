@@ -2,9 +2,19 @@ import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import type { AuthRequest } from '../middlewares/authMiddleware.js';
 
+const EMAIL_REITORIA = 'admin@uemg.br';
+const isAdmin = (req: Request) => (req as AuthRequest).usuario?.email === EMAIL_REITORIA;
+
 export const getUsuarios = async (req: Request, res: Response) => {
   try {
-    const usuarios = await prisma.usuario.findMany();
+    // A Reitoria vê tudo. Os demais só o necessário para mostrar nomes (autores, orientadores):
+    // CPF, telefone, endereço e matrícula dos outros não saem daqui.
+    const usuarios = isAdmin(req)
+      ? await prisma.usuario.findMany({ orderBy: { nome: 'asc' } })
+      : await prisma.usuario.findMany({
+          select: { id: true, nome: true, email: true, tipo: true, curso: true },
+          orderBy: { nome: 'asc' },
+        });
     res.json(usuarios);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao procurar utilizadores' });
@@ -12,6 +22,11 @@ export const getUsuarios = async (req: Request, res: Response) => {
 };
 
 export const getUsuario = async (req: Request, res: Response): Promise<void> => {
+  // O perfil completo é só do próprio usuário (e da Reitoria)
+  if (!isAdmin(req) && (req as AuthRequest).usuario?.perfilId !== req.params.id) {
+    res.status(403).json({ error: 'Só pode ver o seu próprio perfil.' });
+    return;
+  }
   try {
     const usuario = await prisma.usuario.findUnique({ where: { id: req.params.id as string } });
     if (!usuario) {

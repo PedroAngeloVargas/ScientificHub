@@ -4,9 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/AppHeader';
 import { Alert, Button, Card, Field, Input, Select, Spinner } from '@/components/ui';
+import { ListaUsuarios } from '@/components/ListaUsuarios';
+
+type Aba = 'usuarios' | 'cadastro';
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const [aba, setAba] = useState<Aba>('usuarios');
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [cpf, setCpf] = useState('');
@@ -122,12 +126,32 @@ export default function AdminDashboard() {
 
       <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <div className="mb-8">
-          <h1 className="text-[2.25rem] font-bold leading-tight text-ink">Cadastro institucional</h1>
+          <h1 className="text-[2.25rem] font-bold leading-tight text-ink">Gestão de usuários</h1>
           <p className="mt-3 text-muted">
-            Cadastre alunos, professores e administradores. O sistema gera uma senha temporária para o primeiro acesso.
+            Consulte as contas, redefina senhas e desative acessos. As postagens e os trabalhos de uma conta desativada continuam publicados.
           </p>
         </div>
 
+        <div className="mb-6 flex gap-1 border-b border-line" role="tablist">
+          {([['usuarios', 'Usuários'], ['cadastro', 'Cadastrar usuário']] as const).map(([valor, rotulo]) => (
+            <button
+              key={valor}
+              role="tab"
+              aria-selected={aba === valor}
+              onClick={() => setAba(valor)}
+              className={`-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                aba === valor ? 'border-accent text-ink' : 'border-transparent text-muted hover:text-ink'
+              }`}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+
+        {aba === 'usuarios' && <ListaUsuarios />}
+
+        {aba === 'cadastro' && (
+        <>
         {senhaGerada && (
           <div className="mb-8 rounded-r-lg border border-l-4 border-line border-l-success bg-surface p-6 sm:p-8">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -203,6 +227,8 @@ export default function AdminDashboard() {
             </div>
           </form>
         </Card>
+        </>
+        )}
       </main>
     </div>
   );

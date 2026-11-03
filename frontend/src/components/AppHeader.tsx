@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Logo } from './ui';
 import { PerfilDrawer, iniciais, type UsuarioPerfil } from './PerfilDrawer';
 import { NotificacoesSino } from './NotificacoesSino';
-import { lerSessao } from '@/lib/sessao';
+import { guardarAvisoLogin, lerSessao } from '@/lib/sessao';
 
 const rotulosPapel: Record<string, string> = {
   ALUNO: 'Discente',
@@ -47,11 +47,27 @@ export function AppHeader({ papel }: { papel?: string }) {
     }
     if (!sessao) return;
 
-    // Dados do usuário para o avatar e o menu de perfil
+    // Entrou com a senha temporária da Reitoria: só segue depois de criar uma nova
+    if (sessao.trocarSenha) {
+      router.replace('/trocar-senha');
+      return;
+    }
+
+    // Dados do usuário para o avatar e o menu de perfil. Esta chamada também revela se a conta
+    // foi desativada ou ficou com senha temporária depois do login.
     fetch(`${process.env.NEXT_PUBLIC_PERFIL_URL}/usuarios/${sessao.perfilId}`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('hub_token')}` },
     })
-      .then(res => (res.ok ? res.json() : null))
+      .then(async res => {
+        if (res.ok) return res.json();
+        const dados = await res.json().catch(() => ({}));
+        if (dados.codigo === 'CONTA_DESATIVADA') {
+          localStorage.clear();
+          guardarAvisoLogin(dados.error);
+          router.replace('/login');
+        }
+        return null;
+      })
       .then(setUsuario)
       .catch(() => {});
   }, [router]);

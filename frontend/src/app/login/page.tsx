@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, Field, Input, Logo, Spinner } from '@/components/ui';
-import { paginaInicial } from '@/lib/sessao';
+import { lerAvisoLogin, paginaInicial } from '@/lib/sessao';
 import { GrafoInteresses } from '@/components/GrafoInteresses';
 
 export default function Login() {
@@ -17,17 +17,30 @@ export default function Login() {
   const [tokenMfa, setTokenMfa] = useState('');
   const [codigo, setCodigo] = useState('');
 
+  // Mostra, uma única vez, o motivo de ter sido desconectado (ex: conta desativada)
+  useEffect(() => {
+    const aviso = lerAvisoLogin();
+    // sessionStorage só existe no navegador, então o aviso só pode ser lido depois de montar a página
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (aviso) setErro(aviso);
+  }, []);
+
   // Guarda a sessão e decide para onde ir
-  const concluirLogin = (data: { token: string; perfilId: string; primeiroAcesso: boolean; mfaAtivo: boolean }, role: string) => {
+  const concluirLogin = (
+    data: { token: string; perfilId: string; primeiroAcesso: boolean; mfaAtivo: boolean; senhaTemporaria?: boolean },
+    role: string
+  ) => {
     localStorage.setItem('hub_token', data.token);
     localStorage.setItem('perfil_id', data.perfilId);
     localStorage.setItem('tipo_usuario', role);
 
-    // Ordem obrigatória: primeiro acesso -> configuração do MFA -> Hub
+    // Ordem obrigatória: primeiro acesso -> configuração do MFA -> troca da senha temporária -> Hub
     if (data.primeiroAcesso && role !== 'ADMIN') {
       router.push('/primeiro-acesso');
     } else if (!data.mfaAtivo) {
       router.push('/configurar-mfa');
+    } else if (data.senhaTemporaria) {
+      router.push('/trocar-senha');
     } else {
       router.push(paginaInicial(role));
     }

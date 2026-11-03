@@ -64,6 +64,10 @@ export default function PrimeiroAcesso() {
       setMensagem('Erro: As senhas não coincidem.');
       return;
     }
+    if (novaSenha.length < 8) {
+      setMensagem('Erro: A nova senha deve ter pelo menos 8 caracteres.');
+      return;
+    }
     if (areasSelecionadas.length === 0) {
       setMensagem('Erro: Selecione pelo menos uma área de interesse.');
       return;
@@ -99,13 +103,20 @@ export default function PrimeiroAcesso() {
       });
 
       // Aguarda todos os microsserviços processarem
-      await Promise.all([reqAuth, reqPerfil, reqMatch]);
+      const [resAuth] = await Promise.all([reqAuth, reqPerfil, reqMatch]);
+
+      const dadosAuth = await resAuth.json().catch(() => ({}));
+      if (!resAuth.ok) throw new Error(dadosAuth.error || 'Não foi possível salvar a nova senha.');
+      // O servidor devolve uma sessão nova, já sem a marca de senha temporária
+      if (dadosAuth.token) localStorage.setItem('hub_token', dadosAuth.token);
 
       setMensagem('Perfil salvo com sucesso. Agora, ative a verificação em duas etapas.');
       // Próximo passo obrigatório: configurar o MFA
       setTimeout(() => router.push('/configurar-mfa'), 2000);
     } catch (err) {
-      setMensagem('Erro: não foi possível salvar. Verifique sua conexão e tente de novo.');
+      setMensagem(err instanceof Error && err.message !== 'Failed to fetch'
+        ? `Erro: ${err.message}`
+        : 'Erro: não foi possível salvar. Verifique sua conexão e tente de novo.');
       setCarregando(false);
     }
   };
@@ -132,8 +143,8 @@ export default function PrimeiroAcesso() {
           <form onSubmit={concluirConfiguracao}>
             <Etapa numero={1} titulo="Segurança" descricao="Substitua a senha temporária recebida da Reitoria.">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Nova senha">
-                  <Input type="password" required value={novaSenha} onChange={e => setNovaSenha(e.target.value)} autoComplete="new-password" />
+                <Field label="Nova senha" hint="Mínimo 8 caracteres">
+                  <Input type="password" required minLength={8} value={novaSenha} onChange={e => setNovaSenha(e.target.value)} autoComplete="new-password" />
                 </Field>
                 <Field label="Confirmar nova senha">
                   <Input type="password" required value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} autoComplete="new-password" />
