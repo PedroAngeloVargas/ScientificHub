@@ -48,3 +48,12 @@ const validarToken = (exigirMfa: boolean) => (req: AuthRequest, res: Response, n
 
 export const verificarToken = validarToken(true);
 export const verificarTokenSemMfa = validarToken(false);
+
+// Depois do verificarToken: só a Reitoria (admin@uemg.br) passa
+export const verificarAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (req.usuario?.email !== 'admin@uemg.br') {
+    res.status(403).json({ error: 'Apenas a Reitoria pode realizar esta ação.' });
+    return;
+  }
+  next();
+};

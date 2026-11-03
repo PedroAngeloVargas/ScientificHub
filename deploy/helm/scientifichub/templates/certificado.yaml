@@ -1,0 +1,40 @@
+{{- if .Values.certificado.habilitado }}
+# Emissão do certificado pelo Let's Encrypt, validando o domínio por um registro TXT criado na Cloudflare.
+# Funciona com o proxy da Cloudflare ligado e independe do Ingress: o certificado pode ser emitido antes de o HTTPS ser ativado.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt
+  labels:
+    {{- include "scientifichub.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: {{ .Values.certificado.servidorAcme }}
+    email: {{ required "certificado.email é obrigatório" .Values.certificado.email | quote }}
+    privateKeySecretRef:
+      name: letsencrypt-conta
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: {{ .Values.certificado.segredoCloudflare }}
+              key: api-token
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: scientifichub
+  labels:
+    {{- include "scientifichub.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.ingress.tls.secretName }}
+  dnsNames:
+    - {{ required "certificado.dominio é obrigatório" .Values.certificado.dominio | quote }}
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+  issuerRef:
+    name: letsencrypt
+    kind: Issuer
+{{- end }}

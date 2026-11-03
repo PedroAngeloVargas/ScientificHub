@@ -1,0 +1,28 @@
+# Valores do chart oficial do cert-manager para o cluster do ScientificHub.
+crds:
+  enabled: true
+
+# Só instala o que é usado e com pouca reserva de recursos: os nós são e2-medium
+prometheus:
+  enabled: false
+
+# Na validação por DNS, consulta resolvers públicos em vez dos servidores autoritativos da zona.
+# Assim a verificação interna só passa quando o registro já está visível na internet,
+# e o Let's Encrypt não é chamado antes da troca de nameservers concluir.
+extraArgs:
+  - --dns01-recursive-nameservers-only
+  - --dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53
+
+resources:
+  requests: { cpu: 10m, memory: 64Mi }
+  limits: { memory: 256Mi }
+
+webhook:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 128Mi }
+
+cainjector:
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { memory: 256Mi }

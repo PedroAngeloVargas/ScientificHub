@@ -3,6 +3,9 @@
 #   - infra aplicada (cluster, IP do Ingress, conta de deploy) e imagens no registry (pipeline de imagens)
 #   - PostgreSQL instalado na VM (infra/GCP/postgres/instalar-postgres.sh)
 #   - secrets no GitHub: POSTGRES_PASSWORD, JWT_SECRET e NEO4J_PASSWORD
+# HTTPS (opcional), depois de instalar o cert-manager (deploy/cert-manager/instalar.sh):
+#   1. Variáveis DOMINIO e ACME_EMAIL e secret CLOUDFLARE_API_TOKEN: emite o certificado, sem alterar o Ingress
+#   2. Com o certificado pronto, variável HTTPS_ATIVO=true: o Ingress passa a responder só em HTTPS, no domínio
 name: Deploy (GKE)
 
 on:
@@ -31,6 +34,9 @@ env:
   ZONA: ${{ vars.GCP_ZONE || 'us-central1-a' }}
   # IP interno da VM do PostgreSQL (output "postgres_ip_interno" do Terraform)
   POSTGRES_HOST: ${{ vars.POSTGRES_HOST || '10.40.0.10' }}
+  DOMINIO: ${{ vars.DOMINIO }}
+  ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+  HTTPS_ATIVO: ${{ vars.HTTPS_ATIVO }}
 
 jobs:
   deploy:
@@ -46,8 +52,15 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           erro=0
+          if [ -n "$DOMINIO" ] && { [ -z "$ACME_EMAIL" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; }; then
+            echo "::error::Com a variável DOMINIO, configure também a variável ACME_EMAIL e o secret CLOUDFLARE_API_TOKEN."; erro=1
+          fi
+          if [ "$HTTPS_ATIVO" = "true" ] && [ -z "$DOMINIO" ]; then
+            echo "::error::HTTPS_ATIVO=true exige a variável DOMINIO."; erro=1
+          fi
           for nome in POSTGRES_PASSWORD JWT_SECRET NEO4J_PASSWORD; do
             if [ -z "${!nome}" ]; then echo "::error::Secret $nome não configurado no GitHub."; erro=1; fi
           done
@@ -84,6 +97,7 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
           # Os valores vêm de ficheiros temporários (não aparecem na linha de comando nem no log)
@@ -96,6 +110,11 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
           # Hash do conteúdo: se um secret mudar, o chart reinicia os pods
           echo "checksum=$(cat "$dir"/* | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            printf '%s' "$CLOUDFLARE_API_TOKEN" > "$dir/api-token"
+            kubectl -n "$NAMESPACE" create secret generic cloudflare-api-token \
+              --from-file="$dir/api-token" --dry-run=client -o yaml | kubectl apply -f -
+          fi
           rm -rf "${dir:?}"
 
       - name: Helm upgrade --install
@@ -103,6 +122,18 @@ jobs:
           VERSAO: ${{ inputs.versao }}
           CHECKSUM: ${{ steps.segredos.outputs.checksum }}
         run: |
+          extras=()
+          if [ -n "$DOMINIO" ]; then
+            extras+=(--set certificado.habilitado=true --set-string certificado.dominio="$DOMINIO" --set-string certificado.email="$ACME_EMAIL")
+          fi
+          if [ "$HTTPS_ATIVO" = "true" ]; then
+            # Sem o certificado, o Ingress ficaria sem HTTP e sem HTTPS: para aqui, sem derrubar o site
+            if ! kubectl -n "$NAMESPACE" get secret scientifichub-tls >/dev/null 2>&1; then
+              echo "::error::O certificado ainda não foi emitido. Confira com: kubectl -n $NAMESPACE describe certificate scientifichub"
+              exit 1
+            fi
+            extras+=(--set ingress.tls.habilitado=true --set-string ingress.host="$DOMINIO")
+          fi
           helm upgrade --install "$RELEASE" deploy/helm/scientifichub \
             --namespace "$NAMESPACE" \
             --set imagem.registro="${REGIAO}-docker.pkg.dev/${PROJETO}/scientifichub" \
@@ -111,6 +142,7 @@ jobs:
             --set gcs.bucket="${PROJETO}-uploads" \
             --set gcs.contaServico="scientifichub-academico@${PROJETO}.iam.gserviceaccount.com" \
             --set segredos.checksum="$CHECKSUM" \
+            "${extras[@]}" \
             --wait --timeout 15m
 
       - name: Diagnóstico (só em caso de falha)
@@ -137,10 +169,17 @@ jobs:
             sleep 10
           done
           kubectl -n "$NAMESPACE" get pods
+          if [ -n "$DOMINIO" ]; then
+            kubectl -n "$NAMESPACE" get certificate scientifichub || true
+          fi
           {
             echo "## Deploy concluído (imagens: \`${{ inputs.versao }}\`)"
             if [ -n "$ip" ]; then
-              echo "Aplicação: **http://$ip**"
+              if [ "$HTTPS_ATIVO" = "true" ]; then
+                echo "Aplicação: **https://$DOMINIO**"
+              else
+                echo "Aplicação: **http://$ip**"
+              fi
               echo
               echo "> Na primeira instalação, o Load Balancer pode responder 502/404 por 5 a 10 minutos até os health checks passarem."
             else

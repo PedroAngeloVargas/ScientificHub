@@ -96,7 +96,7 @@ export default function AdminDashboard() {
       // 2. Cria no auth-service com a senha gerada
       const resAuth = await fetch(`${process.env.NEXT_PUBLIC_AUTH_URL}/registrar`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ email, senha: senhaTemporaria, perfilId: dataPerfil.id })
       });
 

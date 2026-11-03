@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { registrar, login, atualizarSenha, loginMfa, configurarMfa, ativarMfa, alterarSenha } from '../controllers/authController.js';
-import { verificarToken, verificarTokenSemMfa } from '../middlewares/authMiddleware.js';
+import { verificarAdmin, verificarToken, verificarTokenSemMfa } from '../middlewares/authMiddleware.js';
 
 const router = Router();
 
-router.post('/registrar', registrar);
+// Contas são criadas apenas pela Reitoria
+router.post('/registrar', verificarToken, verificarAdmin, registrar);
 router.post('/login', login);
 router.post('/login/mfa', loginMfa);
 

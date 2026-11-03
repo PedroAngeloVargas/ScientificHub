@@ -37,6 +37,16 @@ ingress:
     habilitado: false
     secretName: scientifichub-tls
 
+# Certificado do Let's Encrypt (requer o cert-manager: deploy/cert-manager/instalar.sh).
+# Emitir o certificado não altera o Ingress: o HTTPS só é ativado com ingress.tls.habilitado.
+certificado:
+  habilitado: false
+  dominio: ""
+  email: ""
+  servidorAcme: https://acme-v02.api.letsencrypt.org/directory
+  # Secret criado pela pipeline, com a chave api-token
+  segredoCloudflare: cloudflare-api-token
+
 # Aplicações: cada entrada vira um Deployment + Service
 servicos:
   frontend:
