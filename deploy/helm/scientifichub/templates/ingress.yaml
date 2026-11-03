@@ -1,0 +1,40 @@
+{{- if .Values.ingress.habilitado }}
+# Load Balancer HTTP(S) do Google: um único endereço, roteado por caminho para cada serviço
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: scientifichub
+  labels:
+    {{- include "scientifichub.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: {{ .Values.ingress.ipEstaticoNome | quote }}
+    {{- if .Values.ingress.tls.habilitado }}
+    # Com HTTPS ativo, não aceita HTTP
+    kubernetes.io/ingress.allow-http: "false"
+    {{- end }}
+spec:
+  {{- if .Values.ingress.tls.habilitado }}
+  tls:
+    - secretName: {{ .Values.ingress.tls.secretName }}
+      {{- with .Values.ingress.host }}
+      hosts:
+        - {{ . | quote }}
+      {{- end }}
+  {{- end }}
+  rules:
+    - {{- with .Values.ingress.host }}
+      host: {{ . | quote }}
+      {{- end }}
+      http:
+        paths:
+          {{- range .Values.rotas }}
+          - path: {{ .caminho }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .servico }}
+                port:
+                  name: http
+          {{- end }}
+{{- end }}

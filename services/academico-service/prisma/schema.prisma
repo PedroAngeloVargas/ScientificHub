@@ -118,3 +118,43 @@ model Comentario {
   @@index([postagemId])
   @@map("comentarios")
 }
+
+
+// ---------- Notificações ----------
+
+enum TipoNotificacao {
+  NOVA_POSTAGEM         // Para todos: alguém publicou na comunidade
+  NOVA_PUBLICACAO       // Para todos: um trabalho ficou público
+  SUBMISSAO_RECEBIDA    // Para o orientador: há um trabalho para avaliar
+  PUBLICACAO_APROVADA   // Para o autor
+  PUBLICACAO_REJEITADA  // Para o autor, com o parecer
+}
+
+model Notificacao {
+  id             String          @id @default(uuid())
+  tipo           TipoNotificacao
+  destinatarioId String?         // Nulo = para todos os usuários
+  ocultarPara    String[]        // Em avisos para todos: quem não deve receber (ex: o próprio autor)
+  atorId         String          // Quem causou o evento ("Soft Reference" para o perfil-service)
+  referenciaId   String          // Id da postagem ou publicação
+  resumo         String          // Título do trabalho ou trecho da postagem
+  detalhe        String?         // Parecer do orientador
+
+  leituras       NotificacaoLeitura[]
+
+  criadoEm       DateTime        @default(now())
+
+  @@index([destinatarioId, criadoEm])
+  @@index([referenciaId])
+  @@map("notificacoes")
+}
+
+model NotificacaoLeitura {
+  notificacaoId String
+  usuarioId     String
+  notificacao   Notificacao @relation(fields: [notificacaoId], references: [id], onDelete: Cascade)
+  lidaEm        DateTime    @default(now())
+
+  @@id([notificacaoId, usuarioId])
+  @@map("notificacoes_leituras")
+}

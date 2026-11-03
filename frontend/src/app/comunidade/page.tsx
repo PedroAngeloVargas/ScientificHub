@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/AppHeader';
 import { Alert, Badge, Button, Card, Spinner, Textarea } from '@/components/ui';
 import { urlArquivo } from '@/lib/arquivos';
+import { tempoRelativo } from '@/lib/formato';
 
 type Categoria = 'GERAL' | 'EVENTO' | 'OPORTUNIDADE' | 'DUVIDA' | 'CONQUISTA';
 
@@ -53,15 +54,6 @@ const MAX_POSTAGEM = 2000;
 const API = `${process.env.NEXT_PUBLIC_ACADEMICO_URL}/postagens`;
 
 const authHeaders = (): Record<string, string> => ({ 'Authorization': `Bearer ${localStorage.getItem('hub_token')}` });
-
-function tempoRelativo(iso: string) {
-  const segundos = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (segundos < 60) return 'agora';
-  if (segundos < 3600) return `há ${Math.floor(segundos / 60)} min`;
-  if (segundos < 86400) return `há ${Math.floor(segundos / 3600)} h`;
-  if (segundos < 604800) return `há ${Math.floor(segundos / 86400)} d`;
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 function Avatar({ nome, pequeno = false }: { nome?: string; pequeno?: boolean }) {
   const iniciais = (nome ?? '?').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]!.toUpperCase()).join('');

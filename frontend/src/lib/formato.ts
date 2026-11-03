@@ -15,3 +15,12 @@ export function formatarArea(area: string) {
   const frase = palavras.join(' ');
   return especial(palavras[0] ?? '') ? frase : frase.charAt(0).toUpperCase() + frase.slice(1);
 }
+
+export function tempoRelativo(iso: string) {
+  const segundos = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (segundos < 60) return 'agora';
+  if (segundos < 3600) return `há ${Math.floor(segundos / 60)} min`;
+  if (segundos < 86400) return `há ${Math.floor(segundos / 3600)} h`;
+  if (segundos < 604800) return `há ${Math.floor(segundos / 86400)} d`;
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}

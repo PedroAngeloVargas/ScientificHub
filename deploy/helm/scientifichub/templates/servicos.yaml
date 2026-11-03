@@ -1,0 +1,123 @@
+{{- /* Um Deployment + Service para cada entrada de .Values.servicos */}}
+{{- range $nome, $s := .Values.servicos }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $nome }}
+  labels:
+    {{- include "scientifichub.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $nome }}
+spec:
+  replicas: {{ $s.replicas }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $nome }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: scientifichub
+        app.kubernetes.io/name: {{ $nome }}
+      annotations:
+        # Secrets alterados -> novo rollout (as variáveis de ambiente só são lidas no arranque do pod)
+        scientifichub/segredos: {{ $.Values.segredos.checksum | quote }}
+        {{- if eq $.Values.imagem.tag "latest" }}
+        # Com "latest", força um novo rollout a cada deploy para buscar a imagem mais recente
+        scientifichub/deploy: {{ now | unixEpoch | quote }}
+        {{- end }}
+    spec:
+      {{- if $s.usaBucket }}
+      serviceAccountName: {{ $nome }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        {{- if ne $nome "frontend" }}
+        # UID numérico do usuário "node" das imagens Node: o Kubernetes só valida runAsNonRoot com número
+        runAsUser: 1000
+        runAsGroup: 1000
+        {{- end }}
+      containers:
+        - name: {{ $nome }}
+          image: {{ include "scientifichub.imagem" (list $ $nome) }}
+          imagePullPolicy: {{ include "scientifichub.pullPolicy" $ }}
+          ports:
+            - name: http
+              containerPort: {{ $s.porta }}
+          {{- if ne $nome "frontend" }}
+          env:
+            - name: PORT
+              value: {{ $s.porta | quote }}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.segredos.nome }}
+                  key: JWT_SECRET
+            {{- if $s.schemaPrisma }}
+            {{- include "scientifichub.envPostgres" (list $ $s.schemaPrisma) | nindent 12 }}
+            {{- end }}
+            {{- if $s.usaBucket }}
+            - name: GCS_BUCKET
+              value: {{ required "gcs.bucket é obrigatório" $.Values.gcs.bucket | quote }}
+            {{- end }}
+            {{- if $s.usaNeo4j }}
+            - name: NEO4J_URI
+              value: bolt://neo4j:7687
+            - name: NEO4J_USER
+              value: neo4j
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.segredos.nome }}
+                  key: NEO4J_PASSWORD
+            {{- end }}
+          {{- end }}
+          # O Load Balancer do Ingress usa esta probe como health check
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml $s.recursos | nindent 12 }}
+          securityContext:
+            {{- include "scientifichub.securityContext" $ | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $nome }}
+  labels:
+    {{- include "scientifichub.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $nome }}
+  annotations:
+    # NEG: o Load Balancer envia o tráfego direto aos pods (container-native)
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ $nome }}
+  ports:
+    - name: http
+      port: {{ $s.porta }}
+      targetPort: http
+{{- if $s.usaBucket }}
+---
+# Conta do Kubernetes ligada à conta GCP com acesso ao bucket (Workload Identity, sem chave JSON)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $nome }}
+  labels:
+    {{- include "scientifichub.labels" $ | nindent 4 }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ required "gcs.contaServico é obrigatório" $.Values.gcs.contaServico | quote }}
+{{- end }}
+{{- end }}

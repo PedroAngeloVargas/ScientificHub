@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { apagarArquivo, salvarArquivo } from '../lib/armazenamento.js';
+import { notificar, removerNotificacoes } from '../lib/notificacoes.js';
 import type { AuthRequest } from '../middlewares/authMiddleware.js';
 
 const CATEGORIAS = ['GERAL', 'EVENTO', 'OPORTUNIDADE', 'DUVIDA', 'CONQUISTA'] as const;
@@ -66,6 +67,15 @@ export const createPostagem = async (req: AuthRequest, res: Response): Promise<v
       // O autor vem sempre do token, nunca do corpo da requisição
       data: { autorId: req.usuario.perfilId, conteudo, categoria, imagemUrl },
     });
+
+    await notificar({
+      tipo: 'NOVA_POSTAGEM',
+      atorId: nova.autorId,
+      referenciaId: nova.id,
+      resumo: nova.conteudo,
+      ocultarPara: [nova.autorId],
+    });
+
     res.status(201).json({ ...nova, totalCurtidas: 0, totalComentarios: 0, curtidoPorMim: false });
   } catch (error) {
     console.error('ERRO DO PRISMA:', error);
@@ -90,6 +100,7 @@ export const deletePostagem = async (req: AuthRequest, res: Response): Promise<v
     // Curtidas e comentários são removidos em cascata
     await prisma.postagem.delete({ where: { id } });
     await apagarArquivo(postagem.imagemUrl);
+    await removerNotificacoes(id);
     res.status(204).end();
   } catch (error) {
     console.error('ERRO DO PRISMA:', error);

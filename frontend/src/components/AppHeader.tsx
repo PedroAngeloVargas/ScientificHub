@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Logo } from './ui';
 import { PerfilDrawer, iniciais, type UsuarioPerfil } from './PerfilDrawer';
+import { NotificacoesSino } from './NotificacoesSino';
 import { lerSessao } from '@/lib/sessao';
 
 const rotulosPapel: Record<string, string> = {
@@ -87,21 +88,25 @@ export function AppHeader({ papel }: { papel?: string }) {
             </nav>
           )}
 
-          {/* Avatar: abre o menu lateral de perfil */}
-          <button
-            onClick={() => setPerfilAberto(true)}
-            className="flex cursor-pointer items-center gap-2.5 rounded-full py-1 pl-1 pr-1 transition-colors hover:bg-accent-soft sm:pr-3"
-            aria-label="Abrir meu perfil"
-            aria-haspopup="dialog"
-          >
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-accent text-sm font-semibold text-white">
-              {usuario ? iniciais(usuario.nome) : ''}
-            </span>
-            <span className="hidden text-left leading-tight sm:block">
-              <span className="block max-w-36 truncate text-sm font-medium text-ink">{usuario?.nome.split(' ')[0] ?? ' '}</span>
-              {papel && <span className="block text-xs text-muted">{rotulosPapel[papel] ?? papel}</span>}
-            </span>
-          </button>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <NotificacoesSino />
+
+            {/* Avatar: abre o menu lateral de perfil */}
+            <button
+              onClick={() => setPerfilAberto(true)}
+              className="flex cursor-pointer items-center gap-2.5 rounded-full py-1 pl-1 pr-1 transition-colors hover:bg-accent-soft sm:pr-3"
+              aria-label="Abrir meu perfil"
+              aria-haspopup="dialog"
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-accent text-sm font-semibold text-white">
+                {usuario ? iniciais(usuario.nome) : ''}
+              </span>
+              <span className="hidden text-left leading-tight sm:block">
+                <span className="block max-w-36 truncate text-sm font-medium text-ink">{usuario?.nome.split(' ')[0] ?? ' '}</span>
+                {papel && <span className="block text-xs text-muted">{rotulosPapel[papel] ?? papel}</span>}
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 

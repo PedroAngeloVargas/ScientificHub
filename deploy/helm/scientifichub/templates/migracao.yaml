@@ -1,0 +1,47 @@
+{{- /*
+Cria/atualiza as tabelas de cada serviço com "prisma db push" antes de os pods novos subirem
+(hook pre-install/pre-upgrade). Usa a mesma imagem do serviço, que já traz a CLI do Prisma e o schema.
+Se uma mudança apagar dados, o Prisma recusa e o deploy para: nada é apagado sem decisão manual.
+*/}}
+{{- range $nome, $s := .Values.servicos }}
+{{- if $s.schemaPrisma }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrar-{{ $nome }}
+  labels:
+    {{- include "scientifichub.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: scientifichub
+        app.kubernetes.io/name: migrar-{{ $nome }}
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: prisma
+          image: {{ include "scientifichub.imagem" (list $ $nome) }}
+          imagePullPolicy: {{ include "scientifichub.pullPolicy" $ }}
+          command: ["npx", "prisma", "db", "push", "--skip-generate"]
+          env:
+            {{- include "scientifichub.envPostgres" (list $ $s.schemaPrisma) | nindent 12 }}
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            {{- include "scientifichub.securityContext" $ | nindent 12 }}
+{{- end }}
+{{- end }}

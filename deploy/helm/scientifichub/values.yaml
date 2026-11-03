@@ -1,0 +1,104 @@
+# Valores do ScientificHub. A pipeline de deploy (.github/workflows/deploy.yml) preenche os que dependem
+# do projeto GCP (registro, bucket, conta do academico-service) com --set.
+
+imagem:
+  # Ex: us-central1-docker.pkg.dev/<projeto>/scientifichub
+  registro: ""
+  # Hash curto do commit (gerado pela pipeline de imagens) ou "latest"
+  tag: latest
+
+# Secret criado pela pipeline (não fica no repositório) com as chaves:
+#   JWT_SECRET, POSTGRES_PASSWORD, NEO4J_PASSWORD
+segredos:
+  nome: scientifichub-segredos
+  # Hash do conteúdo do Secret (calculado pela pipeline): quando muda, os pods reiniciam com os valores novos
+  checksum: ""
+
+# PostgreSQL na VM privada (IP fixo criado pelo Terraform)
+postgres:
+  host: 10.40.0.10
+  porta: 5432
+  banco: scientifichub
+  usuario: scientifichub
+
+# Uploads (PDFs e imagens) no Cloud Storage, via Workload Identity
+gcs:
+  bucket: ""
+  # Conta GCP do academico-service (output "academico_service_account" do Terraform)
+  contaServico: ""
+
+ingress:
+  habilitado: true
+  # IP global reservado pelo Terraform (output "ingress_ip_nome")
+  ipEstaticoNome: scientifichub-ingress-ip
+  # Vazio = responde em qualquer host (acesso pelo IP). Preencha quando tiver o domínio.
+  host: ""
+  tls:
+    habilitado: false
+    secretName: scientifichub-tls
+
+# Aplicações: cada entrada vira um Deployment + Service
+servicos:
+  frontend:
+    porta: 8080
+    replicas: 1
+    recursos:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }
+
+  auth-service:
+    porta: 3000
+    replicas: 1
+    schemaPrisma: auth  # Schema do PostgreSQL; ativa o Job de "prisma db push"
+    recursos:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+
+  perfil-service:
+    porta: 3001
+    replicas: 1
+    schemaPrisma: perfil
+    recursos:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+
+  academico-service:
+    porta: 3002
+    # Uma réplica basta para o TCC; os uploads já ficam no bucket, então pode escalar se preciso
+    replicas: 1
+    schemaPrisma: academico
+    usaBucket: true
+    recursos:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 512Mi }  # Uploads de até 20 MB passam pela memória
+
+  match-service:
+    porta: 3003
+    replicas: 1
+    usaNeo4j: true
+    recursos:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+
+# Rotas do Ingress (caminho -> serviço). O frontend chama as APIs no mesmo domínio.
+rotas:
+  - { caminho: /api/auth, servico: auth-service }
+  - { caminho: /api/usuarios, servico: perfil-service }
+  - { caminho: /api/publicacoes, servico: academico-service }
+  - { caminho: /api/postagens, servico: academico-service }
+  - { caminho: /api/notificacoes, servico: academico-service }
+  - { caminho: /uploads, servico: academico-service }
+  - { caminho: /api/match, servico: match-service }
+  - { caminho: /, servico: frontend }
+
+neo4j:
+  imagem: neo4j:5
+  disco: 5Gi
+  # pd-standard: o mais barato
+  storageClass: standard
+  memoria:
+    heap: 512m
+    pagecache: 128m
+  recursos:
+    requests: { cpu: 100m, memory: 768Mi }
+    limits: { memory: 1Gi }

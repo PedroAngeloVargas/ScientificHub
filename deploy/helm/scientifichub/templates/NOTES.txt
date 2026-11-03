@@ -1,0 +1,8 @@
+ScientificHub instalado (imagens: {{ .Values.imagem.tag }}).
+
+O Load Balancer do Google leva de 5 a 10 minutos para ficar pronto na primeira instalação.
+Endereço:
+  kubectl get ingress scientifichub -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
+Situação dos pods:
+  kubectl get pods -n {{ .Release.Namespace }}

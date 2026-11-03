@@ -41,6 +41,14 @@ resource "google_container_cluster" "principal" {
     }
   }
 
+  # Endpoint DNS do control plane: acesso controlado por IAM (container.clusters.connect), não por IP.
+  # É por ele que a pipeline de deploy (runners do GitHub, IPs variáveis) chega ao cluster.
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic = true
+    }
+  }
+
   # Workload Identity: Pods usam contas de serviço do GCP sem chaves JSON
   workload_identity_config {
     workload_pool = "${var.projeto_id}.svc.id.goog"

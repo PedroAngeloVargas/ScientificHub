@@ -1,11 +1,14 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { apagarArquivo, salvarArquivo } from '../lib/armazenamento.js';
+import { notificar } from '../lib/notificacoes.js';
 import type { AuthRequest } from '../middlewares/authMiddleware.js';
 
-export const createPublicacao = async (req: Request, res: Response): Promise<void> => {
+export const createPublicacao = async (req: AuthRequest, res: Response): Promise<void> => {
   // Quando usamos multer, os campos de texto vêm em req.body e o ficheiro em req.file
-  const { titulo, resumo, categoria, autorPrincipalId, orientadorId, dataPublicacao } = req.body;
+  const { titulo, resumo, categoria, orientadorId, dataPublicacao } = req.body;
+  // O autor vem sempre do token, nunca do corpo da requisição (é ele quem recebe os avisos da avaliação)
+  const autorPrincipalId: string = req.usuario.perfilId;
   
   if (!req.file) {
     res.status(400).json({ error: 'O upload do arquivo PDF é obrigatório.' });
@@ -28,6 +31,26 @@ export const createPublicacao = async (req: Request, res: Response): Promise<voi
         dataPublicacao: new Date(dataPublicacao)
       },
     });
+
+    if (!orientadorId) {
+      // Sem orientador o trabalho já nasce público
+      await notificar({
+        tipo: 'NOVA_PUBLICACAO',
+        atorId: autorPrincipalId,
+        referenciaId: nova.id,
+        resumo: nova.titulo,
+        ocultarPara: [autorPrincipalId],
+      });
+    } else if (orientadorId !== autorPrincipalId) {
+      await notificar({
+        tipo: 'SUBMISSAO_RECEBIDA',
+        atorId: autorPrincipalId,
+        referenciaId: nova.id,
+        resumo: nova.titulo,
+        destinatarioId: orientadorId,
+      });
+    }
+
     res.status(201).json(nova);
   } catch (error) {
     console.error("ERRO DO PRISMA:", error);
@@ -96,6 +119,29 @@ export const avaliarPublicacao = async (req: AuthRequest, res: Response): Promis
       where: { id },
       data: { status, parecer: parecer?.trim() || null, avaliadoEm: new Date() }
     });
+
+    // O autor fica sabendo do resultado (a não ser que tenha avaliado o próprio trabalho)
+    if (avaliada.autorPrincipalId !== perfilId) {
+      await notificar({
+        tipo: status === 'APROVADA' ? 'PUBLICACAO_APROVADA' : 'PUBLICACAO_REJEITADA',
+        atorId: perfilId,
+        referenciaId: avaliada.id,
+        resumo: avaliada.titulo,
+        destinatarioId: avaliada.autorPrincipalId,
+        detalhe: avaliada.parecer,
+      });
+    }
+    // Aprovado, o trabalho fica público: avisa os demais
+    if (status === 'APROVADA') {
+      await notificar({
+        tipo: 'NOVA_PUBLICACAO',
+        atorId: avaliada.autorPrincipalId,
+        referenciaId: avaliada.id,
+        resumo: avaliada.titulo,
+        ocultarPara: [avaliada.autorPrincipalId, perfilId],
+      });
+    }
+
     res.json(avaliada);
   } catch (error) {
     console.error("ERRO DO PRISMA:", error);

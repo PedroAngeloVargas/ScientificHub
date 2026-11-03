@@ -1,0 +1,149 @@
+# Faz o deploy da aplicação no GKE com o chart Helm (deploy/helm/scientifichub). Só roda manualmente.
+# Pré-requisitos:
+#   - infra aplicada (cluster, IP do Ingress, conta de deploy) e imagens no registry (pipeline de imagens)
+#   - PostgreSQL instalado na VM (infra/GCP/postgres/instalar-postgres.sh)
+#   - secrets no GitHub: POSTGRES_PASSWORD, JWT_SECRET e NEO4J_PASSWORD
+name: Deploy (GKE)
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Tag das imagens: hash curto do commit (resumo da pipeline de imagens) ou latest"
+        type: string
+        default: latest
+
+permissions:
+  contents: read
+  id-token: write  # Token OIDC para a Workload Identity Federation
+
+# Nunca dois deploys ao mesmo tempo
+concurrency:
+  group: deploy-gke
+  cancel-in-progress: false
+
+env:
+  NAMESPACE: scientifichub
+  RELEASE: scientifichub
+  CLUSTER: scientifichub-gke
+  PROJETO: ${{ vars.GCP_PROJECT_ID }}
+  REGIAO: ${{ vars.GCP_REGION || 'us-central1' }}
+  ZONA: ${{ vars.GCP_ZONE || 'us-central1-a' }}
+  # IP interno da VM do PostgreSQL (output "postgres_ip_interno" do Terraform)
+  POSTGRES_HOST: ${{ vars.POSTGRES_HOST || '10.40.0.10' }}
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: producao  # Exige aprovação manual, como o apply da infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir secrets e versão
+        env:
+          VERSAO: ${{ inputs.versao }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+        run: |
+          erro=0
+          for nome in POSTGRES_PASSWORD JWT_SECRET NEO4J_PASSWORD; do
+            if [ -z "${!nome}" ]; then echo "::error::Secret $nome não configurado no GitHub."; erro=1; fi
+          done
+          # A senha do banco entra na URL de conexão: só letras e números (ex: openssl rand -hex 24)
+          if [ -n "$POSTGRES_PASSWORD" ] && ! [[ "$POSTGRES_PASSWORD" =~ ^[A-Za-z0-9]+$ ]]; then
+            echo "::error::POSTGRES_PASSWORD deve ter só letras e números (gere com: openssl rand -hex 24)."; erro=1
+          fi
+          if [ -n "$NEO4J_PASSWORD" ] && [ "${#NEO4J_PASSWORD}" -lt 8 ]; then
+            echo "::error::NEO4J_PASSWORD precisa de pelo menos 8 caracteres (exigência do Neo4j)."; erro=1
+          fi
+          if ! [[ "$VERSAO" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Versão inválida: use o hash curto do commit ou latest."; erro=1
+          fi
+          exit $erro
+
+      - name: Autenticar na GCP (sem chave JSON)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      # Endpoint DNS do cluster: acesso por IAM, sem depender do IP do runner
+      - name: Credenciais do cluster
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ env.CLUSTER }}
+          location: ${{ env.ZONA }}
+          project_id: ${{ env.PROJETO }}
+          use_dns_based_endpoint: true
+
+      - name: Namespace e secrets
+        id: segredos
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+        run: |
+          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          # Os valores vêm de ficheiros temporários (não aparecem na linha de comando nem no log)
+          dir="$(mktemp -d)"
+          printf '%s' "$POSTGRES_PASSWORD" > "$dir/POSTGRES_PASSWORD"
+          printf '%s' "$JWT_SECRET" > "$dir/JWT_SECRET"
+          printf '%s' "$NEO4J_PASSWORD" > "$dir/NEO4J_PASSWORD"
+          kubectl -n "$NAMESPACE" create secret generic scientifichub-segredos \
+            --from-file="$dir/POSTGRES_PASSWORD" --from-file="$dir/JWT_SECRET" --from-file="$dir/NEO4J_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          # Hash do conteúdo: se um secret mudar, o chart reinicia os pods
+          echo "checksum=$(cat "$dir"/* | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          rm -rf "${dir:?}"
+
+      - name: Helm upgrade --install
+        env:
+          VERSAO: ${{ inputs.versao }}
+          CHECKSUM: ${{ steps.segredos.outputs.checksum }}
+        run: |
+          helm upgrade --install "$RELEASE" deploy/helm/scientifichub \
+            --namespace "$NAMESPACE" \
+            --set imagem.registro="${REGIAO}-docker.pkg.dev/${PROJETO}/scientifichub" \
+            --set imagem.tag="$VERSAO" \
+            --set postgres.host="$POSTGRES_HOST" \
+            --set gcs.bucket="${PROJETO}-uploads" \
+            --set gcs.contaServico="scientifichub-academico@${PROJETO}.iam.gserviceaccount.com" \
+            --set segredos.checksum="$CHECKSUM" \
+            --wait --timeout 15m
+
+      - name: Diagnóstico (só em caso de falha)
+        if: failure()
+        run: |
+          echo "::group::Pods"; kubectl -n "$NAMESPACE" get pods -o wide || true; echo "::endgroup::"
+          echo "::group::Eventos recentes"; kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -40 || true; echo "::endgroup::"
+          for job in migrar-auth-service migrar-perfil-service migrar-academico-service; do
+            echo "::group::Log do job $job"; kubectl -n "$NAMESPACE" logs "job/$job" --tail=50 || true; echo "::endgroup::"
+          done
+          for pod in $(kubectl -n "$NAMESPACE" get pods --no-headers | awk '$3 != "Running" && $3 != "Completed" {print $1}'); do
+            echo "::group::Pod com problema: $pod"
+            kubectl -n "$NAMESPACE" describe pod "$pod" | tail -25 || true
+            kubectl -n "$NAMESPACE" logs "$pod" --tail=40 --all-containers || true
+            echo "::endgroup::"
+          done
+
+      - name: Endereço da aplicação
+        run: |
+          # Na primeira instalação o Load Balancer pode levar alguns minutos a receber o IP
+          for i in $(seq 1 30); do
+            ip="$(kubectl -n "$NAMESPACE" get ingress scientifichub -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+            [ -n "$ip" ] && break
+            sleep 10
+          done
+          kubectl -n "$NAMESPACE" get pods
+          {
+            echo "## Deploy concluído (imagens: \`${{ inputs.versao }}\`)"
+            if [ -n "$ip" ]; then
+              echo "Aplicação: **http://$ip**"
+              echo
+              echo "> Na primeira instalação, o Load Balancer pode responder 502/404 por 5 a 10 minutos até os health checks passarem."
+            else
+              echo "O Ingress ainda não recebeu o IP. Confira depois com: \`kubectl -n $NAMESPACE get ingress\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

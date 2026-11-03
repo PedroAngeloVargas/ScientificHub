@@ -1,0 +1,6 @@
+apiVersion: v2
+name: scientifichub
+description: ScientificHub (UEMG) - frontend, microsserviços, Neo4j e Ingress no GKE
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
